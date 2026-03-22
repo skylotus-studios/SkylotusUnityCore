@@ -382,7 +382,7 @@ notif.OnNotificationHide += n => DestroyToastUI(n);
 
 ### DebugConsole
 
-Press **` (backtick)** in-game to toggle. Type `help` for all commands.
+Press **`` ` `` (backtick)** in-game to toggle. Type `help` for all commands.
 
 ```csharp
 DebugConsole.Register("god", "Toggle god mode", args =>
