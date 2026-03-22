@@ -6,7 +6,8 @@
     "Unity.TextMeshPro",
     "Unity.Addressables",
     "Unity.ResourceManager",
-    "DOTween.Modules"
+    "LitMotion",
+    "LitMotion.Extensions"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],

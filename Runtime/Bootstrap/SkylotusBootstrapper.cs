@@ -1,4 +1,4 @@
-using DG.Tweening;
+using LitMotion;
 using UnityEngine;
 
 namespace Skylotus
@@ -10,7 +10,7 @@ namespace Skylotus
     ///
     /// Systems initialized (in order):
     /// 1. GameLogger — first, so all other systems can log
-    /// 2. DOTween (direct initialization)
+    /// 2. LitMotion (no initialization required)
     /// 3. SaveSystem
     /// 4. LocalizationSystem
     /// 5. AudioManager
@@ -83,10 +83,8 @@ namespace Skylotus
             GameLogger.Initialize(_enableFileLogging, includeStackTrace: true);
             GameLogger.Log("Core", "=== Skylotus Core Systems Bootstrapping ===");
 
-            // ─── DOTween ────────────────────────────────────────────
-            DOTween.Init(recycleAllByDefault: true, useSafeMode: true, logBehaviour: LogBehaviour.ErrorsOnly);
-            DOTween.defaultEaseType = Ease.OutQuad;
-            DOTween.defaultAutoPlay = AutoPlay.All;
+            // ─── LitMotion ─────────────────────────────────────────
+            // LitMotion requires no manual initialization — it's ready to use.
 
             // ─── Save System ────────────────────────────────────────
             var saveSystem = new SaveSystem(
@@ -235,9 +233,9 @@ namespace Skylotus
                 }
             });
 
-            DebugConsole.Register("tween_count", "Show active DOTween count", _ =>
+            DebugConsole.Register("tween_count", "Show active LitMotion count", _ =>
             {
-                DebugConsole.Print($"Active tweens: {DG.Tweening.DOTween.TotalActiveTweens()}");
+                DebugConsole.Print($"Active motions: {MotionDispatcher.GetAliveMotionCount()}");
             });
         }
 
@@ -249,7 +247,7 @@ namespace Skylotus
         {
             EventBus.ClearAll();
             ServiceLocator.Reset();
-            DOTween.KillAll();
+            MotionDispatcher.Cancel();
             _initialized = false;
         }
     }

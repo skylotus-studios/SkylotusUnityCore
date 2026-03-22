@@ -8,7 +8,11 @@ Production-ready core systems library for Unity 6 by **Skylotus Studios**. Drop 
 
 ### Step 1 — Install Dependencies
 
-This package requires **DOTween** and several Unity packages. Add DOTween via the Asset Store (free or Pro), or via OpenUPM if available.
+This package requires **LitMotion** and several Unity packages. Add LitMotion via OpenUPM or Git URL:
+
+```
+https://github.com/AnnulusGames/LitMotion.git?path=src/LitMotion/Assets/LitMotion
+```
 
 ### Step 2 — Add the Package
 
@@ -60,7 +64,7 @@ In your game's `.asmdef`, add:
 }
 ```
 
-If you use DOTween directly in your own scripts, also add `"DOTween.Modules"` to references.
+If you use LitMotion directly in your own scripts, also add `"LitMotion"` and `"LitMotion.Extensions"` to references.
 
 All code lives under the `Skylotus` namespace.
 
@@ -407,7 +411,7 @@ ServiceLocator (static)          EventBus (static)
       ├── SkylotusSceneManager      ├── Creates all systems
       ├── GameStateMachine          ├── Registers with ServiceLocator
       ├── TimeManager               ├── DontDestroyOnLoad
-      ├── DialogueSystem            ├── Initializes DOTween
+      ├── DialogueSystem            ├── Initializes LitMotion
       ├── NotificationSystem        └── Processes EventBus queue
       └── ObjectPool
 ```
