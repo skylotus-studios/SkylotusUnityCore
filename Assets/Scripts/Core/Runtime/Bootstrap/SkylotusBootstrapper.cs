@@ -133,6 +133,9 @@ namespace Skylotus
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 field?.SetValue(inputManager, _inputActions);
 
+                // Initialize after the asset is injected (not in Awake, which fires before injection)
+                inputManager.Initialize();
+
                 ServiceLocator.Register(inputManager);
             }
 

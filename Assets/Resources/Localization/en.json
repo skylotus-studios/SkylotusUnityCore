@@ -1,0 +1,11 @@
+﻿{
+  "menu.play": "Play",
+  "menu.settings": "Settings",
+  "menu.quit": "Quit",
+  "menu.resume": "Resume",
+  "menu.back": "Back",
+  "menu.confirm": "Confirm",
+  "menu.cancel": "Cancel",
+  "loading.text": "Loading...",
+  "greeting": "Hello, {name}!"
+}
