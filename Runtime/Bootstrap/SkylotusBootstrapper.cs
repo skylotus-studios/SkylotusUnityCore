@@ -235,7 +235,7 @@ namespace Skylotus
 
             DebugConsole.Register("tween_count", "Show active LitMotion count", _ =>
             {
-                DebugConsole.Print($"Active motions: {MotionDispatcher.GetAliveMotionCount()}");
+                DebugConsole.Print($"Active motions: {MotionDebugger.Items.Count}");
             });
         }
 
@@ -247,7 +247,7 @@ namespace Skylotus
         {
             EventBus.ClearAll();
             ServiceLocator.Reset();
-            MotionDispatcher.Cancel();
+            MotionDispatcher.Clear();
             _initialized = false;
         }
     }
