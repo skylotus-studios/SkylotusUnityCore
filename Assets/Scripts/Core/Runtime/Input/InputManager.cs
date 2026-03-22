@@ -44,8 +44,11 @@ namespace Skylotus
         /// <summary>Fired whenever the player switches between device types.</summary>
         public event Action<InputDeviceType> OnDeviceChanged;
 
-        /// <summary>Unity Awake — clone the asset to avoid polluting the source, and load saved rebinds.</summary>
-        private void Awake()
+        /// <summary>
+        /// Initialize the InputManager. Called by the bootstrapper after the InputActionAsset
+        /// has been assigned. Clones the asset and loads saved rebinds.
+        /// </summary>
+        public void Initialize()
         {
             if (_inputActions == null)
             {
