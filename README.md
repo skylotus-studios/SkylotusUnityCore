@@ -34,15 +34,7 @@ git clone https://github.com/skylotus-studios/SkylotusUnityCore.git
 
 ## Installation
 
-### Step 1 — Install Dependencies in Unity
-
-This package requires **LitMotion** and several Unity packages. Add LitMotion via OpenUPM or Git URL:
-
-```
-https://github.com/AnnulusGames/LitMotion.git?path=src/LitMotion/Assets/LitMotion
-```
-
-### Step 2 — Initialize New Project
+### Initialize New Project
 
 1. Open your Unity project folder in the terminal.
 
@@ -70,9 +62,7 @@ git remote add origin https://github.com/user/project.git
 ```
 12. Run ```git push -u origin master```.
 
-
-
-### Step 3 — Reference the Assembly
+### Reference the Assembly Definition
 
 In your game's `.asmdef`, add:
 
@@ -90,12 +80,11 @@ All code lives under the `Skylotus` namespace.
 
 ---
 
-## Quick Start
+## Systems Reference
 
-1. Create an empty GameObject in your boot scene
-2. Attach `SkylotusBootstrapper`
-3. Assign your `InputActionAsset` (optional)
-4. All systems auto-register with `ServiceLocator` and persist across scenes
+### ServiceLocator
+
+All systems auto-register with `ServiceLocator` and persist across scenes
 
 ```csharp
 using Skylotus;
@@ -107,10 +96,6 @@ audio.PlaySFX(myClip);
 var save = ServiceLocator.Get<SaveSystem>();
 save.Save("slot1", myData);
 ```
-
----
-
-## Systems Reference
 
 ### EventBus
 
