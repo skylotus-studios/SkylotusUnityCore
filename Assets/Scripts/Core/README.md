@@ -1,12 +1,40 @@
 # Skylotus Unity Core
 
-Production-ready core systems library for Unity 6 by **Skylotus Studios**. Drop into any project as a UPM package and get 16 battle-tested systems with zero scene setup required.
+Production-ready core systems Unity Project (**Unity 6**) by **Skylotus Studios**. When starting any project, clone this into a folder, delete the .git hidden folder, and get 16 battle-tested systems with zero scene setup required.
+
+---
+
+## Prerequisites
+
+1. Install Git. Instructions:
+
+```
+https://git-scm.com/install/
+```
+
+2. Install Git LFS. Instructions:
+
+```
+https://git-lfs.com/
+```
+
+3. Open Terminal and go to folder where you want to install the starter project.
+```
+cd PathToFolder
+```
+4. Clone Project:
+
+```
+git clone https://github.com/skylotus-studios/SkylotusUnityCore.git
+```
+
+5. Delete ```.git``` folder after installing (folder is usually hidden).
 
 ---
 
 ## Installation
 
-### Step 1 — Install Dependencies
+### Step 1 — Install Dependencies in Unity
 
 This package requires **LitMotion** and several Unity packages. Add LitMotion via OpenUPM or Git URL:
 
@@ -14,7 +42,37 @@ This package requires **LitMotion** and several Unity packages. Add LitMotion vi
 https://github.com/AnnulusGames/LitMotion.git?path=src/LitMotion/Assets/LitMotion
 ```
 
-### Step 2 — Reference the Assembly
+### Step 2 — Initialize New Project
+
+1. Open your Unity project folder in the terminal.
+
+2. Initialize Unity project with command ```git init```.
+
+3. Initialize Git Large File Storage with command ```git lfs install```.
+
+4. Check ```git status``` (optional). Red files are not added.
+
+5. Add all the files with ```git add -A```.
+
+6. Check ```git status``` again (optional). Green files are added.
+
+7. Commit it with ```git commit -am "Project Init"```.
+
+8. Check that it was successful with ```git log```.
+
+9. Create an empty repository in GitHub.
+
+10. Copy the link to the repository.
+
+11. Paste it after the command to look like: 
+```
+git remote add origin https://github.com/user/project.git
+```
+12. Run ```git push -u origin master```.
+
+
+
+### Step 3 — Reference the Assembly
 
 In your game's `.asmdef`, add:
 
