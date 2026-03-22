@@ -24,7 +24,7 @@ namespace Skylotus
     /// 13. NotificationSystem
     /// 14. DebugConsole (optional)
     /// </summary>
-    public class SkylotusBootstrapper : MonoBehaviour
+    public class Bootstrapper : MonoBehaviour
     {
         [Header("Systems Configuration")]
         [Tooltip("Enable the in-game debug console (toggle with ` key).")]
@@ -38,6 +38,10 @@ namespace Skylotus
 
         [Tooltip("AES encryption key for save files. Leave empty for plaintext saves.")]
         [SerializeField] private string _saveEncryptionKey = "";
+
+        [Header("Scene Flow")]
+        [Tooltip("Scene loaded automatically after all systems initialize. Leave empty to stay in the boot scene.")]
+        [SerializeField] private string _firstScene = "MainMenu";
 
         [Header("References (Optional)")]
         [Tooltip("The project's Input Action Asset. If null, InputManager is not created.")]
@@ -75,6 +79,23 @@ namespace Skylotus
         }
 
         /// <summary>
+        /// Unity Start — load the first scene (e.g. MainMenu) after all systems are ready.
+        /// Runs one frame after Awake so every MonoBehaviour's Awake has completed.
+        /// </summary>
+        private void Start()
+        {
+            if (!string.IsNullOrEmpty(_firstScene))
+            {
+                var sceneManager = ServiceLocator.Get<SceneManager>();
+                if (sceneManager != null)
+                {
+                    GameLogger.Log("Core", $"Loading first scene: {_firstScene}");
+                    sceneManager.LoadScene(_firstScene, showLoadingScreen: false, addToHistory: false);
+                }
+            }
+        }
+
+        /// <summary>
         /// Create and register all core systems in dependency order.
         /// </summary>
         private void InitializeSystems()
@@ -109,7 +130,7 @@ namespace Skylotus
 
             // ─── Scene Manager ──────────────────────────────────────
             var sceneGo = CreateChild("SceneManager");
-            var sceneManager = sceneGo.AddComponent<SkylotusSceneManager>();
+            var sceneManager = sceneGo.AddComponent<SceneManager>();
             ServiceLocator.Register(sceneManager);
 
             // ─── Game State ─────────────────────────────────────────

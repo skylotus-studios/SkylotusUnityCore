@@ -13,7 +13,7 @@ namespace Skylotus
     /// Assign a loading screen CanvasGroup and progress bar in the inspector,
     /// or use without them for instant cuts.
     /// </summary>
-    public class SkylotusSceneManager : MonoBehaviour
+    public class SceneManager : MonoBehaviour
     {
         [Header("Loading Screen")]
         [Tooltip("CanvasGroup used for the loading screen fade overlay.")]
@@ -55,7 +55,7 @@ namespace Skylotus
         /// <summary>Unity Awake — capture the initial scene and hide the loading screen.</summary>
         private void Awake()
         {
-            _currentScene = SceneManager.GetActiveScene().name;
+            _currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
 
             if (_loadingScreen != null)
             {
@@ -145,7 +145,7 @@ namespace Skylotus
             float startTime = Time.unscaledTime;
 
             // Begin async load — hold activation until we're ready
-            var op = SceneManager.LoadSceneAsync(sceneName, mode);
+            var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName, mode);
             op.allowSceneActivation = false;
 
             // Report progress (Unity caps at 0.9 until activation is allowed)
@@ -189,7 +189,7 @@ namespace Skylotus
         private IEnumerator UnloadSceneRoutine(string sceneName, Action onComplete)
         {
             OnSceneUnloading?.Invoke(sceneName);
-            var op = SceneManager.UnloadSceneAsync(sceneName);
+            var op = UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(sceneName);
 
             if (op == null)
             {
