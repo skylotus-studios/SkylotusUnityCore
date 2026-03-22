@@ -69,7 +69,7 @@ namespace Skylotus
 
             _initialized = true;
             DontDestroyOnLoad(gameObject);
-            gameObject.name = "[Skylotus]";
+            gameObject.name = "[Skylotus Bootstrapper]";
 
             InitializeSystems();
         }
