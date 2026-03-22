@@ -14,57 +14,19 @@ This package requires **LitMotion** and several Unity packages. Add LitMotion vi
 https://github.com/AnnulusGames/LitMotion.git?path=src/LitMotion/Assets/LitMotion
 ```
 
-### Step 2 — Add the Package
-
-**Option A — Git URL (recommended)**
-
-Add to your project's `Packages/manifest.json`:
-
-```json
-{
-  "dependencies": {
-    "com.skylotus.core": "https://github.com/skylotus-studios/SkylotusUnityCore.git",
-    "com.unity.inputsystem": "1.11.2",
-    "com.unity.textmeshpro": "4.0.0",
-    "com.unity.addressables": "2.3.1"
-  }
-}
-```
-
-To lock to a specific version, append a tag or commit:
-
-```json
-"com.skylotus.core": "https://github.com/skylotus-studios/SkylotusUnityCore.git#v1.0.0"
-```
-
-**Option B — Local Package**
-
-Clone the repo into your `Packages/` directory:
-
-```bash
-cd YourProject/Packages
-git clone https://github.com/skylotus-studios/SkylotusUnityCore.git com.skylotus.core
-```
-
-Then reference it in `manifest.json`:
-
-```json
-"com.skylotus.core": "file:com.skylotus.core"
-```
-
-### Step 3 — Reference the Assembly
+### Step 2 — Reference the Assembly
 
 In your game's `.asmdef`, add:
 
 ```json
 {
   "references": [
-    "Skylotus.Core.Runtime"
+    "Skylotus.Core.Runtime",
+    "LitMotion",
+    "LitMotion.Extensions"
   ]
 }
 ```
-
-If you use LitMotion directly in your own scripts, also add `"LitMotion"` and `"LitMotion.Extensions"` to references.
 
 All code lives under the `Skylotus` namespace.
 
