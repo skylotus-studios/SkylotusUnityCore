@@ -1,5 +1,6 @@
 ﻿using LitMotion;
 using LitMotion.Extensions;
+using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
@@ -8,52 +9,64 @@ using UnityEngine.UI;
 namespace Skylotus
 {
     /// <summary>
-    /// Custom UI button with sprite swapping, LitMotion scale/punch tweens on
-    /// select/hover, and UI sound effects. Works with both mouse and gamepad
-    /// navigation through the Unity EventSystem.
+    /// Custom UI button with LitMotion tweened transitions — scale, color, and press pulse.
+    /// All visual feedback is driven by tweens between a primary (normal) and secondary
+    /// (highlighted) color pair for both the background Image and the label Text.
     ///
-    /// Inherits <see cref="Selectable"/> for full EventSystem integration and
-    /// implements click/submit handlers manually for maximum control.
+    /// On press a ghost copy of the button's own Image expands outward and fades to zero,
+    /// creating a shockwave / pulse ring effect using the secondary color.
     ///
-    /// <code>
-    /// // Wire in code:
-    /// button.OnClick.AddListener(() => Debug.Log("Clicked!"));
-    /// </code>
+    /// Inherits <see cref="Selectable"/> for full EventSystem integration (mouse + gamepad)
+    /// and implements click/submit handlers manually.
     /// </summary>
-    [AddComponentMenu("UI/ButtonExtended")]
+    [AddComponentMenu("UI (Canvas)/ButtonExtended")]
     [RequireComponent(typeof(Image))]
     public class ButtonExtended : Selectable,
         IPointerClickHandler, ISubmitHandler
     {
-        // ─── Sprite Swapping ────────────────────────────────────────
+        // ─── Color ──────────────────────────────────────────────────
 
-        [Header("Sprite States")]
-        [Tooltip("Sprite shown in the normal (idle) state.")]
-        [SerializeField] private Sprite _normalSprite;
+        [Header("Colors — Image")]
+        [Tooltip("Background color in the normal / idle state.")]
+        [SerializeField] private Color _imagePrimaryColor = Color.white;
 
-        [Tooltip("Sprite shown when highlighted / selected.")]
-        [SerializeField] private Sprite _highlightedSprite;
+        [Tooltip("Background color when highlighted / selected.")]
+        [SerializeField] private Color _imageSecondaryColor = new(0.85f, 0.85f, 0.85f, 1f);
 
-        [Tooltip("Sprite shown while pressed.")]
-        [SerializeField] private Sprite _pressedSprite;
+        [Header("Colors — Text")]
+        [Tooltip("Label color in the normal / idle state.")]
+        [SerializeField] private Color _textPrimaryColor = Color.black;
 
-        [Tooltip("Sprite shown when the button is disabled.")]
-        [SerializeField] private Sprite _disabledSprite;
+        [Tooltip("Label color when highlighted / selected.")]
+        [SerializeField] private Color _textSecondaryColor = Color.white;
 
-        // ─── Tween Settings ────────────────────────────────────────
+        [Header("Colors — Disabled")]
+        [Tooltip("Background color when the button is disabled.")]
+        [SerializeField] private Color _imageDisabledColor = new(0.6f, 0.6f, 0.6f, 0.5f);
 
-        [Header("Tween")]
-        [Tooltip("Target scale when highlighted (e.g. 1.08 for 8 % enlarge).")]
+        [Tooltip("Label color when the button is disabled.")]
+        [SerializeField] private Color _textDisabledColor = new(0.4f, 0.4f, 0.4f, 1f);
+
+        // ─── Scale ──────────────────────────────────────────────────
+
+        [Header("Scale Tween")]
+        [Tooltip("Target scale when highlighted (e.g. 1.08 for 8% enlarge).")]
         [SerializeField] private float _highlightScale = 1.08f;
 
-        [Tooltip("Duration of the scale tween in seconds.")]
+        [Tooltip("Duration of the scale & color tweens in seconds.")]
         [SerializeField] private float _tweenDuration = 0.2f;
 
-        [Tooltip("Punch strength applied as a jiggle on select.")]
-        [SerializeField] private Vector3 _punchStrength = new(0.06f, 0.06f, 0f);
+        // ─── Pulse ──────────────────────────────────────────────────
 
-        [Tooltip("Duration of the punch jiggle in seconds.")]
-        [SerializeField] private float _punchDuration = 0.35f;
+        [Header("Press Pulse")]
+        [Tooltip("How many pixels the pulse ghost expands beyond the button on each axis.")]
+        [SerializeField] private float _pulseExpand = 30f;
+
+        [Tooltip("Duration of the pulse expand + fade animation.")]
+        [SerializeField] private float _pulseDuration = 0.35f;
+
+        [Tooltip("Easing for the pulse expansion.")]
+        [SerializeField] private Ease _pulseEase = Ease.OutSine;
 
         // ─── Audio ──────────────────────────────────────────────────
 
@@ -72,22 +85,27 @@ namespace Skylotus
         /// <summary>Invoked on pointer click or gamepad submit.</summary>
         public UnityEvent OnClick => _onClick;
 
+        // ─── References ─────────────────────────────────────────────
+
+        [Header("References")]
+        [Tooltip("Optional TMP label — auto-found on children if not assigned.")]
+        [SerializeField] private TMP_Text _label;
+
         // ─── Internal State ─────────────────────────────────────────
 
-        /// <summary>The Image component used for sprite display.</summary>
         private Image _image;
-
-        /// <summary>Handle to the currently playing scale tween (for cancellation).</summary>
-        private MotionHandle _scaleTween;
-
-        /// <summary>Handle to the currently playing punch tween (for cancellation).</summary>
-        private MotionHandle _punchTween;
-
-        /// <summary>Cached reference to the AudioManager (resolved once).</summary>
         private AudioManager _audio;
-
-        /// <summary>Tracks the previous Selectable state to avoid redundant transitions.</summary>
         private SelectionState _lastState = SelectionState.Normal;
+
+        // Tweens for state transitions
+        private MotionHandle _scaleTween;
+        private MotionHandle _imageColorTween;
+        private MotionHandle _textColorTween;
+
+        // Pulse ghost
+        private Image _pulseImage;
+        private RectTransform _pulseRect;
+        private CompositeMotionHandle _pulseHandles = new(2);
 
         // ─── Unity Lifecycle ────────────────────────────────────────
 
@@ -95,43 +113,29 @@ namespace Skylotus
         {
             base.Awake();
             _image = GetComponent<Image>();
+            if (_label == null) _label = GetComponentInChildren<TMP_Text>();
 
-            // Apply normal sprite on startup
-            if (_normalSprite != null && _image != null)
-                _image.sprite = _normalSprite;
+            // Apply primary colors on startup
+            if (_image != null) _image.color = _imagePrimaryColor;
+            if (_label != null) _label.color = _textPrimaryColor;
+
+            CreatePulseGhost();
         }
 
         protected override void OnDestroy()
         {
             base.OnDestroy();
-            CancelTweens();
+            CancelAllTweens();
+            _pulseHandles.Cancel();
         }
 
         // ─── Selectable Transition Override ─────────────────────────
 
-        /// <summary>
-        /// Called by the EventSystem whenever the selectable state changes.
-        /// We swap sprites, play scale/punch tweens, and trigger hover audio.
-        /// </summary>
         protected override void DoStateTransition(SelectionState state, bool instant)
         {
             base.DoStateTransition(state, instant);
             if (!Application.isPlaying) return;
 
-            // Swap sprite
-            if (_image != null)
-            {
-                _image.sprite = state switch
-                {
-                    SelectionState.Highlighted => _highlightedSprite ? _highlightedSprite : _normalSprite,
-                    SelectionState.Pressed     => _pressedSprite     ? _pressedSprite     : _normalSprite,
-                    SelectionState.Selected    => _highlightedSprite ? _highlightedSprite : _normalSprite,
-                    SelectionState.Disabled    => _disabledSprite    ? _disabledSprite    : _normalSprite,
-                    _                          => _normalSprite
-                };
-            }
-
-            // Tween & audio on state enter (skip if same state fires again)
             if (state == _lastState) return;
             _lastState = state;
 
@@ -146,8 +150,11 @@ namespace Skylotus
                     PlayPress(instant);
                     break;
 
-                case SelectionState.Normal:
                 case SelectionState.Disabled:
+                    PlayDisabled(instant);
+                    break;
+
+                case SelectionState.Normal:
                 default:
                     PlayNormal(instant);
                     break;
@@ -156,88 +163,208 @@ namespace Skylotus
 
         // ─── Click / Submit ─────────────────────────────────────────
 
-        /// <summary>Mouse / touch click.</summary>
         public void OnPointerClick(PointerEventData eventData)
         {
             if (!IsInteractable()) return;
             PerformClick();
         }
 
-        /// <summary>Gamepad / keyboard submit (A button, Enter, Space).</summary>
         public void OnSubmit(BaseEventData eventData)
         {
             if (!IsInteractable()) return;
             PerformClick();
         }
 
-        /// <summary>Common click logic: sound + event.</summary>
         private void PerformClick()
         {
             PlaySound(_clickSound);
+            FirePulse();
             _onClick?.Invoke();
         }
 
-        // ─── Tween Helpers ──────────────────────────────────────────
+        // ─── State Tweens ───────────────────────────────────────────
 
         private void PlayHighlight(bool instant)
         {
-            CancelTweens();
+            CancelAllTweens();
+
+            var targetScale = Vector3.one * _highlightScale;
 
             if (instant)
             {
-                transform.localScale = Vector3.one * _highlightScale;
+                transform.localScale = targetScale;
+                SetColors(_imageSecondaryColor, _textSecondaryColor);
                 return;
             }
 
             PlaySound(_hoverSound);
 
-            // Scale up
-            _scaleTween = LMotion.Create(transform.localScale, Vector3.one * _highlightScale, _tweenDuration)
+            _scaleTween = LMotion.Create(transform.localScale, targetScale, _tweenDuration)
                 .WithEase(Ease.OutBack)
                 .BindToLocalScale(transform);
 
-            // Jiggle punch on top
-            _punchTween = LMotion.Punch.Create(Vector3.one * _highlightScale, _punchStrength, _punchDuration)
-                .WithDelay(_tweenDuration * 0.5f)
-                .BindToLocalScale(transform);
+            TweenColors(_imageSecondaryColor, _textSecondaryColor);
         }
 
         private void PlayPress(bool instant)
         {
-            CancelTweens();
+            CancelAllTweens();
 
             var pressedScale = Vector3.one * (_highlightScale * 0.95f);
 
             if (instant)
             {
                 transform.localScale = pressedScale;
+                SetColors(_imageSecondaryColor, _textSecondaryColor);
                 return;
             }
 
             _scaleTween = LMotion.Create(transform.localScale, pressedScale, _tweenDuration * 0.5f)
                 .WithEase(Ease.OutQuad)
                 .BindToLocalScale(transform);
+
+            TweenColors(_imageSecondaryColor, _textSecondaryColor);
         }
 
         private void PlayNormal(bool instant)
         {
-            CancelTweens();
+            CancelAllTweens();
 
             if (instant)
             {
                 transform.localScale = Vector3.one;
+                SetColors(_imagePrimaryColor, _textPrimaryColor);
                 return;
             }
 
             _scaleTween = LMotion.Create(transform.localScale, Vector3.one, _tweenDuration)
                 .WithEase(Ease.OutQuad)
                 .BindToLocalScale(transform);
+
+            TweenColors(_imagePrimaryColor, _textPrimaryColor);
         }
 
-        private void CancelTweens()
+        private void PlayDisabled(bool instant)
+        {
+            CancelAllTweens();
+
+            transform.localScale = Vector3.one;
+            SetColors(_imageDisabledColor, _textDisabledColor);
+        }
+
+        // ─── Press Pulse ────────────────────────────────────────────
+
+        /// <summary>
+        /// Creates a hidden child Image that mirrors the button's sprite / shape.
+        /// Activated on press to expand outward and fade to zero — a self-shaped shockwave.
+        /// </summary>
+        private void CreatePulseGhost()
+        {
+            var go = new GameObject("_PulseGhost", typeof(RectTransform), typeof(Image));
+            _pulseRect = go.GetComponent<RectTransform>();
+            _pulseRect.SetParent(transform, false);
+            _pulseRect.SetAsFirstSibling(); // render behind the label
+
+            // Stretch to fill the button exactly
+            _pulseRect.anchorMin = Vector2.zero;
+            _pulseRect.anchorMax = Vector2.one;
+            _pulseRect.offsetMin = Vector2.zero;
+            _pulseRect.offsetMax = Vector2.zero;
+
+            _pulseImage = go.GetComponent<Image>();
+            _pulseImage.raycastTarget = false;
+
+            // Copy the button's sprite so the pulse has the same shape / rounded corners
+            if (_image != null)
+            {
+                _pulseImage.sprite = _image.sprite;
+                _pulseImage.type = _image.type;
+                _pulseImage.pixelsPerUnitMultiplier = _image.pixelsPerUnitMultiplier;
+            }
+
+            go.SetActive(false);
+        }
+
+        /// <summary>
+        /// Fire the pulse: reset the ghost to the button's size with the secondary color,
+        /// then expand outward and fade alpha to 0.
+        /// </summary>
+        private void FirePulse()
+        {
+            if (_pulseImage == null) return;
+
+            // Complete any in-flight pulse so it doesn't stack
+            _pulseHandles.Complete();
+
+            // Reset to match button size (anchors already handle this, just clear offsets)
+            _pulseRect.offsetMin = Vector2.zero;
+            _pulseRect.offsetMax = Vector2.zero;
+
+            // Start with the secondary color at full alpha
+            var startColor = _imageSecondaryColor;
+            _pulseImage.color = startColor;
+            _pulseRect.gameObject.SetActive(true);
+
+            // Expand: push offsets outward (negative min, positive max)
+            var expandedMin = new Vector2(-_pulseExpand, -_pulseExpand);
+            var expandedMax = new Vector2(_pulseExpand, _pulseExpand);
+
+            // Tween offsetMin (bottom-left pushes outward)
+            LMotion.Create(Vector2.zero, expandedMin, _pulseDuration)
+                .WithEase(_pulseEase)
+                .Bind(_pulseRect, static (v, rt) => rt.offsetMin = v)
+                .AddTo(_pulseHandles);
+
+            // Tween offsetMax (top-right pushes outward) + fade alpha to 0, deactivate on complete
+            LMotion.Create(Vector2.zero, expandedMax, _pulseDuration)
+                .WithEase(_pulseEase)
+                .Bind(_pulseRect, static (v, rt) => rt.offsetMax = v)
+                .AddTo(_pulseHandles);
+
+            LMotion.Create(startColor.a, 0f, _pulseDuration)
+                .WithEase(_pulseEase)
+                .WithOnComplete(() => _pulseRect.gameObject.SetActive(false))
+                .Bind(_pulseImage, static (a, img) =>
+                {
+                    var c = img.color;
+                    c.a = a;
+                    img.color = c;
+                })
+                .AddTo(_pulseHandles);
+        }
+
+        // ─── Color Helpers ──────────────────────────────────────────
+
+        private void TweenColors(Color targetImageColor, Color targetTextColor)
+        {
+            if (_image != null)
+            {
+                _imageColorTween = LMotion.Create(_image.color, targetImageColor, _tweenDuration)
+                    .WithEase(Ease.OutQuad)
+                    .Bind(_image, static (c, img) => img.color = c);
+            }
+
+            if (_label != null)
+            {
+                _textColorTween = LMotion.Create(_label.color, targetTextColor, _tweenDuration)
+                    .WithEase(Ease.OutQuad)
+                    .Bind(_label, static (c, txt) => txt.color = c);
+            }
+        }
+
+        private void SetColors(Color imageColor, Color textColor)
+        {
+            if (_image != null) _image.color = imageColor;
+            if (_label != null) _label.color = textColor;
+        }
+
+        // ─── Cleanup ────────────────────────────────────────────────
+
+        private void CancelAllTweens()
         {
             if (_scaleTween.IsActive()) _scaleTween.TryCancel();
-            if (_punchTween.IsActive()) _punchTween.TryCancel();
+            if (_imageColorTween.IsActive()) _imageColorTween.TryCancel();
+            if (_textColorTween.IsActive()) _textColorTween.TryCancel();
         }
 
         // ─── Audio ──────────────────────────────────────────────────

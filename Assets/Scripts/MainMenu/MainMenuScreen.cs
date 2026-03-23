@@ -25,16 +25,29 @@ public class MainMenuScreen : UIScreen
     [Tooltip("Scene to load when Play is pressed. Must be in Build Settings.")]
     [SerializeField] private string _gameplayScene = "Gameplay";
 
+    [Header("Screens")]
+    [Tooltip("Reference to the Settings screen so it can be registered before the hierarchy is deactivated.")]
+    [SerializeField] private SettingsScreen _settingsScreen;
+
     private void Awake()
     {
-        // Register this screen with UIManager so it can be referenced by name
-        var ui = ServiceLocator.Get<UIManager>();
-        ui?.RegisterScreen("MainMenu", this);
-
-        // Wire button events
+        // Wire button events first (before registration deactivates us)
         _playButton?.OnClick.AddListener(OnPlay);
         _settingsButton?.OnClick.AddListener(OnSettings);
         _quitButton?.OnClick.AddListener(OnQuit);
+
+        var ui = ServiceLocator.Get<UIManager>();
+        if (ui != null)
+        {
+            // Register child / peer screens FIRST — RegisterScreen deactivates GameObjects,
+            // so any screen that is a child of this canvas must be registered before this
+            // screen is registered (which deactivates the entire hierarchy).
+            if (_settingsScreen != null)
+                _settingsScreen.Register(ui);
+
+            ui.RegisterScreen("MainMenu", this);
+            ui.ShowScreenImmediate("MainMenu");
+        }
     }
 
     /// <summary>Called by UIManager when this screen becomes visible.</summary>

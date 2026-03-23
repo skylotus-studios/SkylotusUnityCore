@@ -129,6 +129,45 @@ namespace Skylotus
         }
 
         /// <summary>
+        /// Show a registered screen instantly with no fade transition.
+        /// Ideal for the very first screen displayed in a scene where a coroutine-based
+        /// fade is unnecessary and can cause a single-frame invisible flicker.
+        /// </summary>
+        /// <param name="name">The registered screen name.</param>
+        public void ShowScreenImmediate(string name)
+        {
+            if (!_registeredScreens.TryGetValue(name, out var screen))
+            {
+                GameLogger.LogError("UI", $"Screen '{name}' not registered");
+                return;
+            }
+
+            // Hide the current screen without animation
+            if (_currentScreen != null)
+            {
+                _currentScreen.OnFocusLost();
+                _currentScreen.OnHide();
+                _currentScreen.gameObject.SetActive(false);
+            }
+
+            // Activate the new screen immediately
+            screen.gameObject.SetActive(true);
+
+            if (screen.CanvasGroup != null)
+            {
+                screen.CanvasGroup.alpha = 1f;
+                screen.CanvasGroup.interactable = true;
+                screen.CanvasGroup.blocksRaycasts = true;
+            }
+
+            _currentScreen = screen;
+            screen.OnShow();
+            screen.OnFocus();
+
+            GameLogger.Log("UI", $"Screen shown (immediate): {name}");
+        }
+
+        /// <summary>
         /// Navigate back to the previous screen on the stack.
         /// Respects <see cref="UIScreen.OnBackPressed"/> — if it returns false, navigation is blocked.
         /// </summary>
