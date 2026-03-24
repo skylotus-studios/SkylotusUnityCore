@@ -40,6 +40,13 @@ namespace Skylotus
         [Tooltip("Label color when highlighted / selected.")]
         [SerializeField] private Color _textSecondaryColor = Color.white;
 
+        [Header("Materials")]
+        [Tooltip("Material for the image in the normal / idle state.")]
+        [SerializeField] private Material _normalImageMaterial;
+
+        [Tooltip("Material for the image when highlighted / selected.")]
+        [SerializeField] private Material _activeImageMaterial;
+
         [Header("Colors — Disabled")]
         [Tooltip("Background color when the button is disabled.")]
         [SerializeField] private Color _imageDisabledColor = new(0.6f, 0.6f, 0.6f, 0.5f);
@@ -59,6 +66,9 @@ namespace Skylotus
         // ─── Pulse ──────────────────────────────────────────────────
 
         [Header("Press Pulse")]
+        [Tooltip("Image used as the pulse ghost.")]
+        [SerializeField] private Image _pulseGhostImage;
+
         [Tooltip("How many pixels the pulse ghost expands beyond the button on each axis.")]
         [SerializeField] private float _pulseExpand = 30f;
 
@@ -103,7 +113,6 @@ namespace Skylotus
         private MotionHandle _textColorTween;
 
         // Pulse ghost
-        private Image _pulseImage;
         private RectTransform _pulseRect;
         private CompositeMotionHandle _pulseHandles = new(2);
 
@@ -116,10 +125,11 @@ namespace Skylotus
             if (_label == null) _label = GetComponentInChildren<TMP_Text>();
 
             // Apply primary colors on startup
-            if (_image != null) _image.color = _imagePrimaryColor;
+            if (_image != null) {
+                _image.color = _imagePrimaryColor;
+                _image.material = _normalImageMaterial;
+            }
             if (_label != null) _label.color = _textPrimaryColor;
-
-            CreatePulseGhost();
         }
 
         protected override void OnDestroy()
@@ -193,11 +203,13 @@ namespace Skylotus
             if (instant)
             {
                 transform.localScale = targetScale;
-                SetColors(_imageSecondaryColor, _textSecondaryColor);
+                SetState(_imageSecondaryColor, _textSecondaryColor, _activeImageMaterial);
                 return;
             }
 
             PlaySound(_hoverSound);
+
+            if (_image != null) _image.material = _activeImageMaterial;
 
             _scaleTween = LMotion.Create(transform.localScale, targetScale, _tweenDuration)
                 .WithEase(Ease.OutBack)
@@ -215,9 +227,11 @@ namespace Skylotus
             if (instant)
             {
                 transform.localScale = pressedScale;
-                SetColors(_imageSecondaryColor, _textSecondaryColor);
+                SetState(_imageSecondaryColor, _textSecondaryColor, _activeImageMaterial);
                 return;
             }
+
+            if (_image != null) _image.material = _activeImageMaterial;
 
             _scaleTween = LMotion.Create(transform.localScale, pressedScale, _tweenDuration * 0.5f)
                 .WithEase(Ease.OutQuad)
@@ -233,9 +247,11 @@ namespace Skylotus
             if (instant)
             {
                 transform.localScale = Vector3.one;
-                SetColors(_imagePrimaryColor, _textPrimaryColor);
+                SetState(_imagePrimaryColor, _textPrimaryColor, _normalImageMaterial);
                 return;
             }
+
+            if (_image != null) _image.material = _normalImageMaterial;
 
             _scaleTween = LMotion.Create(transform.localScale, Vector3.one, _tweenDuration)
                 .WithEase(Ease.OutQuad)
@@ -249,40 +265,7 @@ namespace Skylotus
             CancelAllTweens();
 
             transform.localScale = Vector3.one;
-            SetColors(_imageDisabledColor, _textDisabledColor);
-        }
-
-        // ─── Press Pulse ────────────────────────────────────────────
-
-        /// <summary>
-        /// Creates a hidden child Image that mirrors the button's sprite / shape.
-        /// Activated on press to expand outward and fade to zero — a self-shaped shockwave.
-        /// </summary>
-        private void CreatePulseGhost()
-        {
-            var go = new GameObject("_PulseGhost", typeof(RectTransform), typeof(Image));
-            _pulseRect = go.GetComponent<RectTransform>();
-            _pulseRect.SetParent(transform, false);
-            _pulseRect.SetAsFirstSibling(); // render behind the label
-
-            // Stretch to fill the button exactly
-            _pulseRect.anchorMin = Vector2.zero;
-            _pulseRect.anchorMax = Vector2.one;
-            _pulseRect.offsetMin = Vector2.zero;
-            _pulseRect.offsetMax = Vector2.zero;
-
-            _pulseImage = go.GetComponent<Image>();
-            _pulseImage.raycastTarget = false;
-
-            // Copy the button's sprite so the pulse has the same shape / rounded corners
-            if (_image != null)
-            {
-                _pulseImage.sprite = _image.sprite;
-                _pulseImage.type = _image.type;
-                _pulseImage.pixelsPerUnitMultiplier = _image.pixelsPerUnitMultiplier;
-            }
-
-            go.SetActive(false);
+            SetState(_imageDisabledColor, _textDisabledColor, _normalImageMaterial);
         }
 
         /// <summary>
@@ -291,7 +274,8 @@ namespace Skylotus
         /// </summary>
         private void FirePulse()
         {
-            if (_pulseImage == null) return;
+            if (_pulseGhostImage == null) return;
+            _pulseRect = _pulseGhostImage.rectTransform;
 
             // Complete any in-flight pulse so it doesn't stack
             _pulseHandles.Complete();
@@ -302,7 +286,7 @@ namespace Skylotus
 
             // Start with the secondary color at full alpha
             var startColor = _imageSecondaryColor;
-            _pulseImage.color = startColor;
+            _pulseGhostImage.color = startColor;
             _pulseRect.gameObject.SetActive(true);
 
             // Expand: push offsets outward (negative min, positive max)
@@ -324,7 +308,7 @@ namespace Skylotus
             LMotion.Create(startColor.a, 0f, _pulseDuration)
                 .WithEase(_pulseEase)
                 .WithOnComplete(() => _pulseRect.gameObject.SetActive(false))
-                .Bind(_pulseImage, static (a, img) =>
+                .Bind(_pulseGhostImage, static (a, img) =>
                 {
                     var c = img.color;
                     c.a = a;
@@ -352,9 +336,12 @@ namespace Skylotus
             }
         }
 
-        private void SetColors(Color imageColor, Color textColor)
+        private void SetState(Color imageColor, Color textColor, Material material)
         {
-            if (_image != null) _image.color = imageColor;
+            if (_image != null) {
+                _image.color = imageColor;
+                _image.material = material;
+            }
             if (_label != null) _label.color = textColor;
         }
 

@@ -12,11 +12,13 @@ public class SettingsScreen : UIScreen
     [Tooltip("Back / Close button that returns to the previous screen.")]
     [SerializeField] private ButtonExtended _backButton;
 
-    private void Awake()
+    /// <summary>
+    /// Called by the parent screen (MainMenuScreen) to register with UIManager
+    /// before the shared canvas hierarchy is deactivated.
+    /// </summary>
+    public void Register(UIManager ui)
     {
-        var ui = ServiceLocator.Get<UIManager>();
-        ui?.RegisterScreen("Settings", this);
-
+        ui.RegisterScreen("Settings", this);
         _backButton?.OnClick.AddListener(OnBack);
     }
 
