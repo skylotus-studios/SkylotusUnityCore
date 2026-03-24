@@ -1,5 +1,4 @@
 ﻿using LitMotion;
-using LitMotion.Extensions;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -17,23 +16,27 @@ namespace Skylotus
     /// Place this on a UI Image that lives on its own Screen Space – Overlay Canvas
     /// with the highest sort order. Disable the <c>GraphicRaycaster</c> on that canvas
     /// so the cursor image does not intercept clicks.
+    ///
+    /// The cursor image should be a child of this GameObject.
     /// </summary>
     [AddComponentMenu("Skylotus/UI/Custom Cursor")]
-    [RequireComponent(typeof(RectTransform))]
     public class CustomCursor : MonoBehaviour
     {
         [Header("References")]
-        [Tooltip("The Image component that displays the cursor sprite.")]
+        [Tooltip("The Image component that displays the cursor sprite (child object).")]
         [SerializeField] private Image _cursorImage;
 
         [Tooltip("The parent Canvas (must be Screen Space – Overlay).")]
         [SerializeField] private Canvas _canvas;
 
+        [Tooltip("Fallback selectable to auto-select when entering gamepad mode with nothing selected.")]
+        [SerializeField] private GameObject _defaultSelection;
+
         [Header("Settings")]
         [Tooltip("Duration of the smooth snap tween in gamepad mode.")]
         [SerializeField] private float _snapDuration = 0.12f;
 
-        [Tooltip("Offset from the selected element's center (screen pixels).")]
+        [Tooltip("Offset from the selected element's center (canvas-scaled pixels).")]
         [SerializeField] private Vector2 _selectionOffset = Vector2.zero;
 
         [Tooltip("Hide the cursor entirely when no UI is selected in gamepad mode.")]
@@ -41,38 +44,39 @@ namespace Skylotus
 
         // ─── Internal State ─────────────────────────────────────────
 
-        private RectTransform _rect;
+        /// <summary>The RectTransform we actually move — the cursor image, not this parent.</summary>
+        private RectTransform _cursorRect;
         private RectTransform _canvasRect;
+        private Camera _uiCamera;
         private bool _isGamepadMode;
         private GameObject _lastSelected;
         private MotionHandle _snapTween;
-        private Camera _uiCamera;
 
         // ─── Unity Lifecycle ────────────────────────────────────────
 
         private void Awake()
         {
-            _rect = GetComponent<RectTransform>();
+            if (_cursorImage != null)
+                _cursorRect = _cursorImage.rectTransform;
+
             if (_canvas != null)
+            {
                 _canvasRect = _canvas.GetComponent<RectTransform>();
+
+                // For overlay canvases pass null camera to ScreenPointToLocalPointInRectangle
+                if (_canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+                    _uiCamera = _canvas.worldCamera;
+            }
         }
 
         private void OnEnable()
         {
-            // Hide OS cursor
             Cursor.visible = false;
-
-            // Subscribe to device changes
             EventBus.Subscribe<OnInputDeviceChangedEvent>(OnDeviceChanged);
 
-            // Determine initial mode
             var inputManager = ServiceLocator.Get<InputManager>();
             if (inputManager != null)
                 _isGamepadMode = inputManager.CurrentDevice == InputDeviceType.Gamepad;
-
-            // Camera for ScreenPointToLocalPoint (null for overlay canvas)
-            if (_canvas != null && _canvas.renderMode != RenderMode.ScreenSpaceOverlay)
-                _uiCamera = _canvas.worldCamera;
         }
 
         private void OnDisable()
@@ -84,6 +88,8 @@ namespace Skylotus
 
         private void LateUpdate()
         {
+            if (_cursorRect == null) return;
+
             if (_isGamepadMode)
                 UpdateGamepadCursor();
             else
@@ -94,17 +100,35 @@ namespace Skylotus
 
         private void OnDeviceChanged(OnInputDeviceChangedEvent evt)
         {
+            bool wasGamepad = _isGamepadMode;
             _isGamepadMode = evt.DeviceType == InputDeviceType.Gamepad;
 
             if (!_isGamepadMode)
             {
-                // Returning to mouse — make sure cursor is visible and cancel any snap
+                // Gamepad → Mouse: clear the gamepad selection so the old button
+                // deselects. Pointer hover events will highlight as needed.
+                if (wasGamepad && EventSystem.current != null)
+                    EventSystem.current.SetSelectedGameObject(null);
+
                 SetCursorVisible(true);
                 CancelSnap();
+                _lastSelected = null;
             }
             else
             {
-                // Entering gamepad — snap to current selection immediately
+                // Mouse → Gamepad: force PointerExit on every selectable that is
+                // currently in a highlighted / hovered state so only the gamepad-
+                // selected button shows as active.
+                ClearAllPointerHovers();
+
+                // If nothing is selected, auto-select a default so d-pad navigation works.
+                if (EventSystem.current != null && EventSystem.current.currentSelectedGameObject == null)
+                {
+                    var target = _defaultSelection != null ? _defaultSelection : FindFirstSelectable();
+                    if (target != null)
+                        EventSystem.current.SetSelectedGameObject(target);
+                }
+
                 SnapToSelection(true);
             }
         }
@@ -115,19 +139,19 @@ namespace Skylotus
         {
             SetCursorVisible(true);
 
-            var mousePos = Mouse.current != null
-                ? Mouse.current.position.ReadValue()
-                : (Vector2)Input.mousePosition;
-
-            if (_canvasRect != null)
-            {
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    _canvasRect, mousePos, _uiCamera, out var localPoint);
-                _rect.anchoredPosition = localPoint;
-            }
+            Vector2 screenPos;
+            if (Mouse.current != null)
+                screenPos = Mouse.current.position.ReadValue();
             else
+                screenPos = Input.mousePosition;
+
+            // Convert the raw screen-pixel position into the canvas's local coordinate
+            // space. ScreenPointToLocalPointInRectangle handles the Canvas Scaler math
+            // internally — pass null camera for Screen Space Overlay.
+            if (_canvasRect != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    _canvasRect, screenPos, _uiCamera, out var localPoint))
             {
-                _rect.position = mousePos;
+                _cursorRect.localPosition = localPoint;
             }
         }
 
@@ -139,7 +163,6 @@ namespace Skylotus
                 ? EventSystem.current.currentSelectedGameObject
                 : null;
 
-            // Nothing selected
             if (selected == null)
             {
                 if (_hideWhenNoSelection)
@@ -149,7 +172,6 @@ namespace Skylotus
 
             SetCursorVisible(true);
 
-            // Only re-snap when the selection changes
             if (selected != _lastSelected)
             {
                 _lastSelected = selected;
@@ -168,37 +190,83 @@ namespace Skylotus
             var targetRect = selected.GetComponent<RectTransform>();
             if (targetRect == null) return;
 
-            // Convert the selected element's world center to our canvas local space
-            var worldPos = targetRect.position;
-            Vector2 targetLocal;
+            // Get the screen-space bottom-right corner of the selected element,
+            // then convert to our canvas's local space.
+            Vector2 screenPos = GetScreenBottomRight(targetRect);
+            if (_canvasRect == null) return;
 
-            if (_canvasRect != null)
-            {
-                var screenPos = RectTransformUtility.WorldToScreenPoint(_uiCamera, worldPos);
-                RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    _canvasRect, screenPos, _uiCamera, out targetLocal);
-            }
-            else
-            {
-                targetLocal = worldPos;
-            }
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    _canvasRect, screenPos, _uiCamera, out var localPoint))
+                return;
 
-            targetLocal += _selectionOffset;
+            localPoint += _selectionOffset;
+            var targetPos = new Vector3(localPoint.x, localPoint.y, 0f);
 
             CancelSnap();
 
             if (instant || _snapDuration <= 0f)
             {
-                _rect.anchoredPosition = targetLocal;
+                _cursorRect.localPosition = targetPos;
                 return;
             }
 
-            _snapTween = LMotion.Create(_rect.anchoredPosition, targetLocal, _snapDuration)
+            _snapTween = LMotion.Create(_cursorRect.localPosition, targetPos, _snapDuration)
                 .WithEase(Ease.OutCubic)
-                .BindToAnchoredPosition(_rect);
+                .Bind(_cursorRect, static (v, rt) => rt.localPosition = v);
+        }
+
+        /// <summary>
+        /// Get the screen-pixel bottom-right corner of a RectTransform.
+        /// GetWorldCorners order: [0]=BL, [1]=TL, [2]=TR, [3]=BR.
+        /// For overlay canvases these are already in screen pixels.
+        /// </summary>
+        private Vector2 GetScreenBottomRight(RectTransform targetRect)
+        {
+            Vector3[] corners = new Vector3[4];
+            targetRect.GetWorldCorners(corners);
+
+            // For non-overlay canvases, convert world→screen through the camera.
+            if (_canvas != null && _canvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            {
+                var cam = _canvas.worldCamera != null ? _canvas.worldCamera : Camera.main;
+                if (cam != null)
+                    return RectTransformUtility.WorldToScreenPoint(cam, corners[3]);
+            }
+
+            // Overlay canvas — world corners are screen pixels
+            return corners[3];
         }
 
         // ─── Helpers ────────────────────────────────────────────────
+
+        /// <summary>
+        /// Send a PointerExit event to every Selectable that the pointer is currently
+        /// hovering over. This forces them back to Normal state immediately.
+        /// </summary>
+        private static void ClearAllPointerHovers()
+        {
+            var pointerData = new PointerEventData(EventSystem.current);
+
+            foreach (var selectable in Selectable.allSelectablesArray)
+            {
+                if (selectable == null || !selectable.gameObject.activeInHierarchy)
+                    continue;
+
+                // IsHighlighted is not public, but we can send the exit unconditionally —
+                // it's harmless on non-hovered objects and costs very little.
+                ExecuteEvents.Execute(selectable.gameObject, pointerData, ExecuteEvents.pointerExitHandler);
+            }
+        }
+
+        private static GameObject FindFirstSelectable()
+        {
+            foreach (var s in Selectable.allSelectablesArray)
+            {
+                if (s != null && s.IsInteractable() && s.gameObject.activeInHierarchy)
+                    return s.gameObject;
+            }
+            return null;
+        }
 
         private void SetCursorVisible(bool visible)
         {

@@ -35,6 +35,12 @@ namespace Skylotus
         /// <summary>PlayerPrefs key used to persist rebinding overrides across sessions.</summary>
         private const string RebindSaveKey = "InputRebinds";
 
+        /// <summary>
+        /// Minimum magnitude for a gamepad stick/trigger value to count as intentional input.
+        /// Prevents analog drift from phantom-switching the device to Gamepad.
+        /// </summary>
+        private const float GamepadNoiseThreshold = 0.15f;
+
         /// <summary>The runtime input action asset instance.</summary>
         public InputActionAsset Actions => _inputActions;
 
@@ -330,14 +336,34 @@ namespace Skylotus
             if (change != InputActionChange.ActionPerformed) return;
             if (obj is not InputAction action) return;
 
-            var device = action.activeControl?.device;
+            var control = action.activeControl;
+            if (control == null) return;
+
+            var device = control.device;
             if (device == null) return;
 
             // Map the physical device to our simplified enum
             InputDeviceType newType;
-            if (device is Gamepad) newType = InputDeviceType.Gamepad;
-            else if (device is Touchscreen) newType = InputDeviceType.Touch;
-            else newType = InputDeviceType.KeyboardMouse;
+            if (device is Gamepad)
+            {
+                // Filter out analog stick / trigger noise — only count intentional input.
+                // ReadValueAsObject returns the current value; for sticks this is a Vector2.
+                var rawValue = control.ReadValueAsObject();
+                if (rawValue is Vector2 stick && stick.sqrMagnitude < GamepadNoiseThreshold * GamepadNoiseThreshold)
+                    return;
+                if (rawValue is float axis && Mathf.Abs(axis) < GamepadNoiseThreshold)
+                    return;
+
+                newType = InputDeviceType.Gamepad;
+            }
+            else if (device is Touchscreen)
+            {
+                newType = InputDeviceType.Touch;
+            }
+            else
+            {
+                newType = InputDeviceType.KeyboardMouse;
+            }
 
             if (newType != _currentDevice)
             {

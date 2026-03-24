@@ -67,9 +67,14 @@ public class MainMenuScreen : UIScreen
     {
         base.OnFocus();
 
-        // Auto-select the first button for immediate gamepad navigation
-        if (_playButton != null && EventSystem.current != null)
-            EventSystem.current.SetSelectedGameObject(_playButton.gameObject);
+        // Auto-select the first button only in gamepad mode so it doesn't
+        // conflict with mouse hover highlighting.
+        var inputManager = ServiceLocator.Get<InputManager>();
+        if (inputManager != null && inputManager.CurrentDevice == InputDeviceType.Gamepad)
+        {
+            if (_playButton != null && EventSystem.current != null)
+                EventSystem.current.SetSelectedGameObject(_playButton.gameObject);
+        }
     }
 
     /// <summary>Prevent back from closing the main menu (there's nothing behind it).</summary>
