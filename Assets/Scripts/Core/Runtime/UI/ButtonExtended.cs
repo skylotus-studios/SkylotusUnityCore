@@ -1,5 +1,6 @@
 ﻿using LitMotion;
 using LitMotion.Extensions;
+using Skylotus.Core.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -48,10 +49,10 @@ namespace Skylotus
         [SerializeField] private Material _activeImageMaterial;
 
         [Header("Colors — Disabled")]
-        [Tooltip("Background color when the button is disabled.")]
+        [Tooltip("Background color when the button is disabled (auto-computed as 50 % opacity primary if palette is set).")]
         [SerializeField] private Color _imageDisabledColor = new(0.6f, 0.6f, 0.6f, 0.5f);
 
-        [Tooltip("Label color when the button is disabled.")]
+        [Tooltip("Label color when the button is disabled (auto-computed as 50 % opacity textPrimary if palette is set).")]
         [SerializeField] private Color _textDisabledColor = new(0.4f, 0.4f, 0.4f, 1f);
 
         // ─── Scale ──────────────────────────────────────────────────
@@ -105,6 +106,7 @@ namespace Skylotus
 
         private Image _image;
         private AudioManager _audio;
+        private Shadow _shadow;
         private SelectionState _lastState = SelectionState.Normal;
 
         // Tweens for state transitions
@@ -122,10 +124,24 @@ namespace Skylotus
         {
             base.Awake();
             _image = GetComponent<Image>();
+            _shadow = GetComponent<Shadow>() ?? GetComponentInChildren<Shadow>();
             if (_label == null) _label = GetComponentInChildren<TMP_Text>();
 
+            // Pull colors from the registered ColorPalette; fall back to inspector values
+            if (ServiceLocator.TryGet<ColorPalette>(out var palette))
+            {
+                _imagePrimaryColor = palette.primary;
+                _imageSecondaryColor = palette.secondary;
+                _textPrimaryColor = palette.textPrimary;
+                _textSecondaryColor = palette.textSecondary;
+                // Disabled = 50 % opacity of the normal colors
+                _imageDisabledColor = new Color(palette.primary.r, palette.primary.g, palette.primary.b, palette.primary.a * 0.5f);
+                _textDisabledColor = new Color(palette.textPrimary.r, palette.textPrimary.g, palette.textPrimary.b, palette.textPrimary.a * 0.5f);
+            }
+
             // Apply primary colors on startup
-            if (_image != null) {
+            if (_image != null)
+            {
                 _image.color = _imagePrimaryColor;
                 _image.material = _normalImageMaterial;
             }
@@ -197,6 +213,7 @@ namespace Skylotus
         private void PlayHighlight(bool instant)
         {
             CancelAllTweens();
+            if (_shadow != null) _shadow.enabled = true;
 
             var targetScale = Vector3.one * _highlightScale;
 
@@ -221,6 +238,7 @@ namespace Skylotus
         private void PlayPress(bool instant)
         {
             CancelAllTweens();
+            if (_shadow != null) _shadow.enabled = true;
 
             var pressedScale = Vector3.one * (_highlightScale * 0.95f);
 
@@ -243,6 +261,7 @@ namespace Skylotus
         private void PlayNormal(bool instant)
         {
             CancelAllTweens();
+            if (_shadow != null) _shadow.enabled = true;
 
             if (instant)
             {
@@ -263,6 +282,7 @@ namespace Skylotus
         private void PlayDisabled(bool instant)
         {
             CancelAllTweens();
+            if (_shadow != null) _shadow.enabled = false;
 
             transform.localScale = Vector3.one;
             SetState(_imageDisabledColor, _textDisabledColor, _normalImageMaterial);
@@ -338,7 +358,8 @@ namespace Skylotus
 
         private void SetState(Color imageColor, Color textColor, Material material)
         {
-            if (_image != null) {
+            if (_image != null)
+            {
                 _image.color = imageColor;
                 _image.material = material;
             }
@@ -360,7 +381,7 @@ namespace Skylotus
         {
             if (clip == null) return;
 
-            _audio ??= ServiceLocator.Get<AudioManager>();
+            if (_audio == null) ServiceLocator.TryGet(out _audio);
             _audio?.PlayUI(clip);
         }
     }

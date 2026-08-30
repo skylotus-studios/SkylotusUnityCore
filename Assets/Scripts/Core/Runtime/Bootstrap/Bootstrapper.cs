@@ -47,6 +47,9 @@ namespace Skylotus
         [Tooltip("The project's Input Action Asset. If null, InputManager is not created.")]
         [SerializeField] private UnityEngine.InputSystem.InputActionAsset _inputActions;
 
+        [Tooltip("Color palette ScriptableObject. If assigned, registered with ServiceLocator for global access.")]
+        [SerializeField] private Skylotus.Core.UI.ColorPalette _colorPalette;
+
         /// <summary>Ensures only one bootstrapper runs across scene reloads.</summary>
         private static bool _initialized;
 
@@ -159,6 +162,10 @@ namespace Skylotus
 
                 ServiceLocator.Register(inputManager);
             }
+
+            // ─── Color Palette ──────────────────────────────────────
+            if (_colorPalette != null)
+                ServiceLocator.Register(_colorPalette);
 
             // ─── UI Manager ────────────────────────────────────────
             var uiGo = CreateChild("UIManager");

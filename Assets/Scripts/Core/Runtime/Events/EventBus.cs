@@ -272,4 +272,15 @@ namespace Skylotus
 
     /// <summary>Enumerates the lifecycle phases of a dialogue.</summary>
     public enum DialogueEventType { Started, LineAdvanced, ChoiceMade, Ended }
+
+    /// <summary>Raised when a settings value is changed (video, audio, controls).</summary>
+    public struct OnSettingsChangedEvent : IGameEvent
+    {
+        /// <summary>The settings category (e.g. "Video", "Audio", "Controls").</summary>
+        public string Category;
+        /// <summary>The specific setting key (e.g. "Brightness", "Master").</summary>
+        public string Key;
+        /// <summary>The new value as a float. For bools use 0/1.</summary>
+        public float Value;
+    }
 }
