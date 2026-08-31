@@ -1,0 +1,138 @@
+name: Unity Tests
+
+# WP-13 (see CORE_FIXES.md). Mirrors Tools/unity-verify.ps1's intent so local and CI
+# verification cannot drift: compile first, then EditMode + PlayMode tests via the Unity
+# test framework. GameCI's actions wrap the equivalent Unity CLI invocation (batchmode,
+# nographics, -runTests/-testPlatform/-testResults) plus license activation, which the
+# local script does not need to handle itself.
+#
+# Assets/Tests/** does not exist yet -- WP-12 (a later wave) creates it. Until then the
+# "detect-tests" job below routes every run to a compile-only check instead of failing on
+# a test suite that has not been written.
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+concurrency:
+  group: unity-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+
+env:
+  UNITY_VERSION: 6000.3.8f1
+
+jobs:
+  # --- Gate: does a test suite exist yet? ------------------------------------
+  detect-tests:
+    name: Detect test assemblies
+    runs-on: ubuntu-latest
+    outputs:
+      hasTests: ${{ steps.detect.outputs.hasTests }}
+    steps:
+      - name: Checkout (LFS not needed for this check)
+        uses: actions/checkout@v4
+
+      - id: detect
+        name: Check whether Assets/Tests exists yet
+        shell: bash
+        run: |
+          # WP-12 adds Assets/Tests (with EditMode/PlayMode asmdefs) in a later wave. Failing
+          # this workflow for a suite that has not been written yet would be a false positive
+          # on every PR in the meantime, so route to a compile-only job instead.
+          if [ -d "Assets/Tests" ] && find Assets/Tests -name '*.asmdef' -print -quit | grep -q .; then
+            echo "hasTests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "hasTests=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Assets/Tests not found yet (added by WP-12). Running a compile-only check instead of EditMode/PlayMode tests."
+          fi
+
+  # --- Real path, once WP-12 lands -------------------------------------------
+  test:
+    name: ${{ matrix.testMode }} tests
+    needs: detect-tests
+    if: needs.detect-tests.outputs.hasTests == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        testMode: [EditMode, PlayMode]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ matrix.testMode }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-${{ matrix.testMode }}-
+            Library-${{ runner.os }}-
+
+      - name: Run ${{ matrix.testMode }} tests
+        uses: game-ci/unity-test-runner@v4
+        id: tests
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: ${{ matrix.testMode }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: ${{ matrix.testMode }} test results
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.testMode }}
+          path: ${{ steps.tests.outputs.artifactsPath }}
+          retention-days: 14
+
+  # --- Interim path, until WP-12 lands ----------------------------------------
+  compile-only:
+    name: Compile check (no test suite yet)
+    needs: detect-tests
+    if: needs.detect-tests.outputs.hasTests == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-compile-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-compile-
+            Library-${{ runner.os }}-
+
+      # Runs an EditMode pass with zero test assemblies present. Unity's test runner does
+      # not fail on an empty suite -- it still forces a full script compile, which is the
+      # same signal `Tools\unity-verify.ps1 -Mode compile` gives locally (non-zero exit ==
+      # scripts failed to compile). This job stops being selected automatically the moment
+      # WP-12 adds Assets/Tests; the "test" job above takes over via the gate above.
+      - name: Compile check
+        uses: game-ci/unity-test-runner@v4
+        id: compile
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: EditMode
+          checkName: Compile check

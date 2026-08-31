@@ -61,19 +61,20 @@ if (-not (Test-Path (Join-Path $ProjectPath 'Assets'))) {
     Write-Error "Not a Unity project (no Assets folder): $ProjectPath"
 }
 
-$lockfile = Join-Path $ProjectPath 'Temp\UnityLockfile'
-if (Test-Path $lockfile) {
-    $holder = Get-CimInstance Win32_Process -Filter "Name='Unity.exe'" |
-        Where-Object { $_.CommandLine -match '-projectpath' -and $_.CommandLine -notmatch 'AssetImportWorker' } |
-        Where-Object { $_.CommandLine -replace '/', '\' -match [regex]::Escape($ProjectPath) }
+# A GUI Editor holding the project cannot be waited out — it stays open indefinitely and
+# every batchmode call would fail. Detect it by process, not by lockfile: our own batchmode
+# runs create the same lockfile, and treating those as fatal would break parallel agents.
+$guiHolder = Get-CimInstance Win32_Process -Filter "Name='Unity.exe'" |
+    Where-Object { $_.CommandLine -match '-projectpath' -and $_.CommandLine -notmatch 'AssetImportWorker' } |
+    Where-Object { $_.CommandLine -notmatch '-batchmode' } |
+    Where-Object { $_.CommandLine -replace '/', '\' -match [regex]::Escape($ProjectPath) }
 
+if ($guiHolder) {
     Write-Host ''
-    Write-Host '  PROJECT IS LOCKED' -ForegroundColor Yellow
-    Write-Host '  The Unity Editor has this project open. Batchmode cannot attach to a' -ForegroundColor Yellow
+    Write-Host '  PROJECT IS LOCKED BY THE EDITOR' -ForegroundColor Yellow
+    Write-Host '  The Unity Editor GUI has this project open. Batchmode cannot attach to a' -ForegroundColor Yellow
     Write-Host '  running Editor and will fail with exit code 1.' -ForegroundColor Yellow
-    if ($holder) {
-        Write-Host "  Holding process: PID $($holder.ProcessId)" -ForegroundColor Yellow
-    }
+    Write-Host "  Holding process: PID $($guiHolder.ProcessId | Select-Object -First 1)" -ForegroundColor Yellow
     Write-Host '  Close the Editor (or run this against a project copy) and retry.' -ForegroundColor Yellow
     Write-Host ''
     exit 2
@@ -81,6 +82,30 @@ if (Test-Path $lockfile) {
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $stamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+
+# --- Cross-process serialization ---------------------------------------------
+# Unity locks a project folder to one process, so concurrent agents must queue rather
+# than fail. A named system mutex serializes every invocation of this script against the
+# same project. Without it, parallel work packages would trip over each other's runs and
+# report a lock rejection as a build failure.
+$mutexName = 'Global\SkylotusUnityVerify_' + ($ProjectPath.ToLowerInvariant() -replace '[^a-z0-9]', '_')
+$mutex = New-Object System.Threading.Mutex($false, $mutexName)
+$mutexHeld = $false
+
+try {
+    if (-not $mutex.WaitOne(0)) {
+        Write-Host "  waiting for another verify run to finish (up to $TimeoutMinutes min)..." -ForegroundColor DarkGray
+        if (-not $mutex.WaitOne([TimeSpan]::FromMinutes($TimeoutMinutes))) {
+            Write-Host '  Timed out waiting for the Unity lock.' -ForegroundColor Red
+            exit 2
+        }
+    }
+    $mutexHeld = $true
+}
+catch [System.Threading.AbandonedMutexException] {
+    # A previous run died without releasing. We now own it; carry on.
+    $mutexHeld = $true
+}
 
 # --- Runner ------------------------------------------------------------------
 
@@ -241,7 +266,21 @@ if ($Mode -in @('tests', 'all')) {
     }
 }
 
+# Release the serialization mutex before exiting. PowerShell's `exit` does not unwind
+# through a closed try/catch, so this is explicit rather than a finally block. A run that
+# dies without reaching here abandons the mutex, which the next waiter picks up via
+# AbandonedMutexException — the queue does not deadlock.
+function Release-VerifyLock {
+    if ($script:mutexHeld -and $script:mutex) {
+        try { $script:mutex.ReleaseMutex() } catch { }
+        $script:mutex.Dispose()
+        $script:mutexHeld = $false
+    }
+}
+
 Write-Host ''
+Release-VerifyLock
+
 if ($failures -eq 0) {
     Write-Host 'PASS' -ForegroundColor Green
     exit 0

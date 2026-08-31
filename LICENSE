@@ -1,0 +1,47 @@
+LICENSE DECISION REQUIRED — DO NOT SHIP THIS FILE AS-IS
+=========================================================
+
+This file is a placeholder. No license has been chosen for this repository.
+
+Why this is a placeholder and not a license
+--------------------------------------------
+
+Skylotus Unity Core is described (see README.md) as the base template Skylotus Studios
+clones into every new commercial project. Choosing a license for that — MIT, proprietary,
+"all rights reserved", a dual-license split between the studio's own code and the
+third-party assets and packages vendored into this repository — is a legal and business
+decision about how the studio's commercial IP is allowed to be used, by whom, and under
+what terms. That decision belongs to whoever owns the studio's IP strategy, not to an
+automated agent filling in a missing file. Guessing wrong here (e.g. silently applying
+MIT, which would let anyone reuse Skylotus Studios' core systems freely, including
+competitors) is a mistake that is expensive to unwind once the repository has been forked
+into real projects and possibly published.
+
+What needs to happen before this file is real
+------------------------------------------------
+
+A human with authority over Skylotus Studios' IP needs to decide, at minimum:
+
+1. Is this repository ever intended to be public, or is it strictly an internal template
+   cloned into private project repositories (per the README's "delete the .git folder"
+   workflow)? That materially changes what "license" even means here — an internal
+   template arguably doesn't need an OSS license at all, just an internal usage policy.
+2. If it stays internal-only: replace this file with a short proprietary /
+   "All Rights Reserved, Skylotus Studios" notice, or remove the file and state the policy
+   in the studio's internal documentation instead.
+3. If any part of it is ever open-sourced or shared externally: pick an actual license
+   (MIT, Apache-2.0, a custom EULA, etc.) with legal input, and confirm every vendored
+   third-party asset and package under Assets/ and Packages/ is compatible with that
+   choice — this repo bundles third-party packages (LitMotion, TextMeshPro assets, the
+   "Animated Loading Icons" asset pack, the UnityEditorDarkMode plugin — see CORE_FIXES.md
+   WP-19) each with their own license terms that a top-level LICENSE file does not
+   override.
+4. Either way, record the decision in README.md so it isn't lost the next time this
+   template is forked.
+
+Until that decision is made, treat this repository as "all rights reserved, no license
+granted" by default — that is the legal default in the absence of an explicit license, so
+this placeholder does not change anyone's rights either way. It exists only as a visible
+marker that the decision has not been made yet, rather than silently having no LICENSE
+file at all (which reads as an oversight rather than a deliberate choice, and gives no
+pointer to what needs to happen next).

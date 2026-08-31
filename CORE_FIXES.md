@@ -29,10 +29,18 @@ Give the agent the WP's *Problem*, *Required change*, and *Acceptance criteria* 
    text. WP-1 is the only package that modifies a scene, and it does so through
    `EditorSceneManager.OpenScene` / `SaveScene` in a generator method.
 5. **The Editor must be closed while agents work.** Unity locks a project folder to one process.
-   With the Editor open, every batchmode call fails with exit code 1 immediately after
+   With the Editor GUI open, every batchmode call fails with exit code 1 immediately after
    `Successfully changed project path` — which reads like a compile failure but is not.
-   `unity-verify.ps1` detects the lock and exits **2** with a clear message rather than letting you
-   misdiagnose it.
+   `unity-verify.ps1` detects a **GUI** Editor by process and exits **2** with a clear message.
+6. **Verification is serialized; run it freely.** `unity-verify.ps1` holds a named system mutex, so
+   concurrent agents queue instead of colliding on the project lock — a second caller prints
+   `waiting for another verify run to finish` and proceeds when the first is done. Agents should
+   self-verify rather than deferring to a wave-boundary check. Always go through the script; a raw
+   `Unity.exe -batchmode` call bypasses the mutex and will fail against a running sibling.
+7. **`SkylotusCI` is a partial class.** Any package adding an `-executeMethod` target creates its
+   own `Assets/Scripts/Editor/SkylotusCI.<Area>.cs` and **does not edit `SkylotusCI.cs`**, which
+   three packages would otherwise contend for. The shared helpers (`Succeed`, `Fail`,
+   `SetObjectReference`, `RequireReference`, `RequireComponent<T>`) are available to every partial.
 
 **Definition of done for every WP:** `Tools\unity-verify.ps1 -Mode compile` exits 0; XML doc
 comments match the surrounding style (this codebase documents every public member); no new
@@ -112,6 +120,69 @@ touches the render pipeline needs `-Graphics` (the wrapper passes `-nographics` 
       the regression test for that package.
 - [x] With the Editor open, any mode exits **2** with the lock message, not a misleading compile
       error.
+
+---
+
+## Wave 1 outcome (2026-08-31)
+
+All eight packages landed. Verified independently of the implementing agents: `-Mode compile` exit 0,
+and `ValidateCoreSystemsPrefab` / `ValidateAudioMixer` / `ValidateLocalization` all exit 0.
+`ValidateAssemblyReferences` still exits 1 by design — it is WP-10's regression test.
+
+| WP | Status | Note |
+|----|--------|------|
+| WP-0 | done | harness; mutex added so parallel agents queue rather than collide |
+| WP-1 | done | core systems prefab |
+| WP-7 | done | ObjectPool — **corrected this document's premise, see below** |
+| WP-8 | done | EventBus — zero-alloc measured, not just reasoned |
+| WP-9 | done | AudioMixer generated headlessly via reflection over internal Unity types |
+| WP-11 | done | project settings — **corrected this document's premise, see below** |
+| WP-13 | done | CI, `.editorconfig`, `CLAUDE.md`, LICENSE placeholder |
+| WP-14 | done | SaveSystem — atomic writes, migrations, async |
+| WP-15 | done | localization — real JSON parser, CLDR plural rules |
+
+### Two premises in this document were wrong
+
+Both were found by the implementing agents and confirmed:
+
+1. **WP-7.** This document claimed `Spawn` parenting to `null` "places it in the active scene", so a
+   scene load destroys the object and leaves a tombstone. False. `Bootstrapper.cs:189-191` does
+   `SetParent(null)` then `DontDestroyOnLoad(root)`, and `ObjectPool._root` sits under that root — so
+   a null-parent spawn becomes a root of the **DontDestroyOnLoad scene** and is never destroyed. The
+   real defect was the opposite: pooled objects silently **persist** across scenes. WP-7 added
+   `MoveGameObjectToScene` so the documented behaviour is now true. **If persistence was actually
+   wanted, revert that and reword the criterion instead.**
+2. **WP-11.** This document claimed `applicationIdentifier` was empty. It was a nested map holding
+   `Standalone: com.DefaultCompany.2D-URP`, with stale differently-cased Android/iOS ids. Likewise
+   `managedStrippingLevel: {}` meant "platform default" (`Minimal`), not "unset". The grep that
+   produced both claims only saw the map keys.
+
+### Open decisions for a human
+
+- **LICENSE.** WP-13 correctly refused to choose one; `LICENSE` is a flagged placeholder. Must be
+  resolved before this template is cloned commercially or shared.
+- **IL2CPP is set but not buildable on this machine.** WP-11 set the Standalone backend to IL2CPP,
+  but the editor install has only `*_mono` variations — the *Windows Build Support (IL2CPP)* module
+  is not installed. WP-11's "a clean clone can produce a Windows standalone build" criterion cannot
+  be met until it is. Escape hatch: `SKYLOTUS_SCRIPTING_BACKEND=Mono2x`.
+- **`.editorconfig` line endings.** WP-13 sampled only `Assets/Scripts/Core/Runtime/` (pure LF) and
+  wrote `end_of_line = lf` for all `*.cs`. The repo is mixed — `Assets/Scripts/MainMenu/*.cs` are
+  CRLF. With `core.autocrlf=true`, an editor honouring `.editorconfig` will rewrite those files
+  wholesale on first save. Either normalize them or relax the rule.
+- **`SkylotusProject.json`** does not exist in the repo. Decide whether it is gitignored per-clone or
+  committed per-project.
+- **`com.unity.localization`.** WP-15 recommends *not* adopting now, but migrating the moment a
+  second shipped language is committed to — there are currently zero `LocalizedText` components in
+  any scene (verified) and three call sites, so this is the cheapest migration point the project will
+  ever have. RTL forces the decision: neither this system nor bare TMP can render it.
+
+### Integration gap closed after the fact
+
+WP-9 could not wire its mixer onto the core systems prefab (WP-1's file) and flagged it as "one
+drag". That would not have survived: `GenerateCoreSystemsPrefab` rebuilds the hierarchy from scratch,
+so a manual assignment is discarded on the next run. `BuildCoreSystemsHierarchy` now assigns
+`AudioManager._mixer` itself, verified serialized on the prefab. `AudioManager`'s `Resources.Load`
+fallback stays — it is the only way the code-construction path gets a mixer.
 
 ---
 
@@ -775,6 +846,14 @@ Confirm the team wants it before forking.
   The system is untested against a real tree.
 - `MotionDebugger.Items.Count` is called unguarded in the `tween_count` console command; LitMotion's
   debugger may be editor-only — verify before release builds.
+- **`GameLogger` is not thread-safe, and no work package owns it.** Found during WP-14 and confirmed:
+  `GameLogger.cs:28` holds a single `private static readonly StringBuilder _buffer`, and `WriteLog`
+  does `Clear()` → `Append()` → `ToString()` on it with no lock. Two threads logging concurrently
+  interleave into one buffer and produce corrupted lines or a torn read. Nothing calls it off the
+  main thread **today** — WP-14 deliberately kept its worker-thread helpers Unity-API-free and
+  log-free to avoid it — but that is a constraint every future async system has to know about, and it
+  is currently written down nowhere but here. Fix: a `[ThreadStatic]` buffer, a lock, or plain local
+  `StringBuilder` allocation in `WriteLog`.
 - **`Bootstrapper._inputActions` is dead on the prefab path** (post-WP-1). The prefab's
   `InputManager` carries the reference; the Bootstrapper field now only feeds the code-construction
   fallback. Two places hold the same asset and can drift. Removing the field means either dropping
