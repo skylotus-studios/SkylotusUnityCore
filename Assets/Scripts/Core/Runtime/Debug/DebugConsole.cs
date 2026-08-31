@@ -1,7 +1,9 @@
 using System;
+using UnityEngine;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
 using System.Collections.Generic;
 using System.Linq;
-using UnityEngine;
+#endif
 
 namespace Skylotus
 {
@@ -10,9 +12,21 @@ namespace Skylotus
     /// Register custom commands with <see cref="Register"/> to extend functionality.
     ///
     /// Built-in commands: help, clear, fps, timescale, log_level, scene, gc, quit
+    ///
+    /// <b>Editor and development builds only.</b> Everything that reads input, draws the
+    /// overlay, or executes a command is compiled behind
+    /// <c>#if UNITY_EDITOR || DEVELOPMENT_BUILD</c>, so a release player ships no console:
+    /// backtick does nothing and no command handler exists to be invoked. The public surface
+    /// (<see cref="Register"/>, <see cref="Print"/>, <see cref="Execute"/>,
+    /// <see cref="IsOpen"/>) still compiles in release as no-ops, so game code that registers
+    /// commands needs no <c>#if</c> of its own. The type itself is never stripped either, so
+    /// the <c>DebugConsole</c> component on the core systems prefab does not become a missing
+    /// script — <see cref="Bootstrapper"/> deactivates that object in release builds.
     /// </summary>
     public class DebugConsole : MonoBehaviour
     {
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+
         /// <summary>Internal representation of a registered console command.</summary>
         private struct Command
         {
@@ -165,14 +179,36 @@ namespace Skylotus
                 Print($"FPS: {1f / Time.unscaledDeltaTime:F1}");
             });
 
-            Register("timescale", "Set time scale (timescale <value>)", args =>
+            // Routed through TimeManager, which is the sole writer of Time.timeScale: a direct
+            // assignment here would be silently reverted by the manager's next ApplyTimeScale.
+            // GameTimeScale is the game's base speed, which is what this command means; pause
+            // tokens and hit-stop still take precedence, so the effective scale is reported too.
+            Register("timescale", "Set game time scale (timescale <value>)", args =>
             {
+                if (!ServiceLocator.TryGet<TimeManager>(out var timeManager))
+                {
+                    Print("<color=yellow>No TimeManager registered — time scale is unavailable.</color>");
+                    return;
+                }
+
                 if (args.Length > 0 && float.TryParse(args[0], out var scale))
                 {
-                    Time.timeScale = scale;
-                    Print($"Time scale set to {scale}");
+                    timeManager.GameTimeScale = scale;
+                    Print($"Game time scale set to {timeManager.GameTimeScale}");
+
+                    if (!Mathf.Approximately(timeManager.EffectiveTimeScale, timeManager.GameTimeScale))
+                    {
+                        Print($"<color=yellow>Overridden right now by " +
+                              $"{(timeManager.IsHitStopped ? "hit-stop" : "a pause")} — " +
+                              $"running at {timeManager.EffectiveTimeScale}.</color>");
+                    }
                 }
-                else Print($"Current time scale: {Time.timeScale}");
+                else
+                {
+                    Print($"Game time scale: {timeManager.GameTimeScale} " +
+                          $"(effective: {timeManager.EffectiveTimeScale}, " +
+                          $"paused: {timeManager.IsPaused}, hit-stop: {timeManager.IsHitStopped})");
+                }
             });
 
             Register("log_level", "Set log level (log_level <trace|debug|info|warning|error>)", args =>
@@ -294,5 +330,46 @@ namespace Skylotus
             tex.Apply();
             return tex;
         }
+
+#else
+
+        // ─── Release stubs ──────────────────────────────────────────
+        // The console does not exist in a release player. These members keep the public API
+        // callable so game code registering commands compiles unchanged, and keep the type
+        // present so the core systems prefab's component is not a missing script.
+
+        /// <summary>Always false in a release build: the console is compiled out.</summary>
+        public static bool IsOpen => false;
+
+        /// <summary>
+        /// No-op in a release build. Command registration is accepted and discarded so game
+        /// code can call this unconditionally.
+        /// </summary>
+        /// <param name="name">The command keyword (ignored).</param>
+        /// <param name="description">A short description (ignored).</param>
+        /// <param name="handler">Callback that will never be invoked.</param>
+        public static void Register(string name, string description, Action<string[]> handler)
+        {
+        }
+
+        /// <summary>
+        /// No-op in a release build. Nothing renders the console log, so the message is
+        /// discarded; use <see cref="GameLogger"/> for output that must survive into a player.
+        /// </summary>
+        /// <param name="message">The message to discard.</param>
+        public static void Print(string message)
+        {
+        }
+
+        /// <summary>
+        /// No-op in a release build. No command is parsed or executed — this exists only so
+        /// callers compile.
+        /// </summary>
+        /// <param name="input">The raw command string (ignored).</param>
+        public static void Execute(string input)
+        {
+        }
+
+#endif
     }
 }

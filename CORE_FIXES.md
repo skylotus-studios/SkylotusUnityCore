@@ -171,10 +171,70 @@ Both were found by the implementing agents and confirmed:
   wholesale on first save. Either normalize them or relax the rule.
 - **`SkylotusProject.json`** does not exist in the repo. Decide whether it is gitignored per-clone or
   committed per-project.
+- **Running the harness mutates tracked project settings.** Every batchmode run opens the project,
+  and Unity 6 migrates settings assets on open. Observed after wave 1:
+  `ProjectSettings/TimeManager.asset` rewrote `Fixed Timestep: 0.02` into the `serializedVersion: 2`
+  rational form (same value), and `ProjectSettings/QualitySettings.asset` went `serializedVersion:
+  4 → 5` adding `meshLodThreshold`. Both are benign and will recur on any Editor open.
+  **One change in that batch is not benign:** the **Low** quality level's `vSyncCount` flipped
+  `0 → 1`. No package asked for it and no `PlayerPrefs` keys exist, so it came from the migration's
+  re-defaulting. Decide whether Low should ship with VSync on; if not, revert that line before
+  committing — and note it will come back on the next Editor open unless the asset is pinned.
 - **`com.unity.localization`.** WP-15 recommends *not* adopting now, but migrating the moment a
   second shipped language is committed to — there are currently zero `LocalizedText` components in
   any scene (verified) and three call sites, so this is the cheapest migration point the project will
   ever have. RTL forces the decision: neither this system nor bare TMP can render it.
+
+## Wave 2 outcome (2026-08-31)
+
+WP-2, WP-4, WP-5, WP-6 all landed. Verified independently: `-Mode compile` exit 0, and
+`ValidateCoreSystemsPrefab` / `ValidateAudioMixer` / `ValidateLocalization` / `ValidateTimeScale` /
+`ValidateSettings` all exit 0. `VerifyReleaseConsoleStripped` exit 0 — **0 of 8** console symbols in
+a real non-development player versus **8 of 8** in a development one, with a control literal found in
+both so a false pass is ruled out.
+
+| WP | Status | Note |
+|----|--------|------|
+| WP-2 | done | `SettingsService` owns every key; `ApplyAll()` runs on both boot paths before the first scene |
+| WP-4 | done | `TimeManager` is sole writer; `UIManager` has zero `Time.timeScale` |
+| WP-5 | done | editor auto-bootstrap, **verified in real play mode** (see below) |
+| WP-6 | done | console compiled out of release, proven by building two players |
+
+### A third premise was wrong, and a fourth writer existed
+
+- **WP-4 found a fourth `Time.timeScale` writer** this document never listed: `DebugConsole`'s
+  `timescale` command. Under WP-4's single-writer design that write is silently reverted by the next
+  `ApplyTimeScale()`. WP-6 routed it through `TimeManager.GameTimeScale`.
+- **The `vSyncCount: 0 → 1` drift was not a Unity migration**, as an earlier note in this file
+  guessed. It was WP-2's own validator: `QualitySettings.vSyncCount` is a property of the **active
+  quality level, not a global**, so restoring it after switching levels writes onto the wrong level.
+  WP-2 caught it, fixed the validator to capture/restore per level, and reverted the asset. Anything
+  that touches `QualitySettings` from a batch target must save and restore per level.
+
+### Headless play mode is possible
+
+WP-5 was told its criteria were probably unreachable from the CLI. It found otherwise:
+`unity-verify.ps1 -Mode tests -TestPlatform PlayMode` **enters play mode even with zero tests**, and
+the log carries the whole boot with call stacks. That settled the design's one real unknown —
+whether `[RuntimeInitializeOnLoadMethod]` fires from an Editor-only assembly — empirically. Use this
+technique for any future runtime claim. Its limit: batchmode play mode always runs an empty untitled
+scene, so scene-specific behaviour still needs WP-12 or a human.
+
+### Still needs a human at the keyboard
+
+WP-5's auto-bootstrap cannot be fully proven headlessly. Open the Editor and check:
+1. `Gameplay.unity` → Play: systems initialize, **you stay in Gameplay** (if it jumps to MainMenu the
+   `_firstScene` injection failed), zero exceptions.
+2. `MainMenu.unity` → Play: menu and settings screens function, zero exceptions.
+3. `BootScene.unity` → Play: the `[EditorBootstrap]` line must **not** appear and bootstrapping must
+   happen exactly once — this is the no-duplicate check.
+
+### Build byproducts in `ProjectSettings/`
+
+Running a Standalone build (WP-6's strip check, and equally WP-13's `BuildWindows64`) materializes
+`m_BuildTargetBatching: []` into an explicit `Standalone / m_StaticBatching: 1 / m_DynamicBatching: 0`
+entry. It is Unity writing its own default and will recur on any build. Keep it or revert it, but
+expect it back.
 
 ### Integration gap closed after the fact
 

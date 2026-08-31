@@ -6,6 +6,10 @@ namespace Skylotus
     /// <summary>
     /// Gameplay settings tab. Rows wrapped in <see cref="SettingsRow"/> for gamepad navigation.
     ///
+    /// Pure view code: the language table, the pref keys and the write-through to
+    /// <see cref="LocalizationSystem"/> live in <see cref="SettingsService"/>. This tab touches
+    /// <c>PlayerPrefs</c> nowhere.
+    ///
     /// <b>Expected hierarchy:</b>
     /// <code>
     ///   ScrollView → Viewport → Content (VerticalLayoutGroup)
@@ -22,36 +26,24 @@ namespace Skylotus
         [SerializeField] private ToggleSlider _vibrationToggle;
         [SerializeField] private ToggleSlider _screenshakeToggle;
 
-        // ─── Prefs Keys ─────────────────────────────────────────────
-
-        private const string PrefLanguage = "Settings_Language";
-        private const string PrefVibration = "Settings_Vibration";
-        private const string PrefScreenshake = "Settings_Screenshake";
-
-        // ─── Data ────────────────────────────────────────────────────
-
-        private static readonly string[] LanguageOptions =
-        {
-            "English",
-            "Spanish",
-            "French",
-            "German",
-            "Portuguese",
-            "Japanese",
-            "Korean",
-            "Chinese (Simplified)"
-        };
+        /// <summary>Owner of the pref keys, the language table, and the write-through to Unity.</summary>
+        private SettingsService _settings;
 
         // ─── Lifecycle ──────────────────────────────────────────────
 
         private void OnEnable()
         {
-            SetupLanguageRow();
-            LoadAndApplyVibration();
-            LoadAndApplyScreenshake();
+            if (!ServiceLocator.TryGet<SettingsService>(out _settings))
+            {
+                GameLogger.LogWarning("Settings",
+                    "No SettingsService registered — gameplay settings will not persist. " +
+                    "Enter play mode from the boot scene.");
+                return;
+            }
 
-            if (_vibrationToggle != null) _vibrationToggle.OnValueChanged += OnVibrationChanged;
-            if (_screenshakeToggle != null) _screenshakeToggle.OnValueChanged += OnScreenshakeChanged;
+            SetupLanguageRow();
+            SetupVibrationToggle();
+            SetupScreenshakeToggle();
         }
 
         private void OnDisable()
@@ -59,6 +51,10 @@ namespace Skylotus
             if (_languageRow != null) _languageRow.OnValueChanged -= OnLanguageChanged;
             if (_vibrationToggle != null) _vibrationToggle.OnValueChanged -= OnVibrationChanged;
             if (_screenshakeToggle != null) _screenshakeToggle.OnValueChanged -= OnScreenshakeChanged;
+
+            // Closing the tab (or the whole settings screen) is the moment to pay for the disk
+            // write that every individual toggle deliberately skipped.
+            _settings?.Flush();
         }
 
         // ─── Setup ──────────────────────────────────────────────────
@@ -67,66 +63,32 @@ namespace Skylotus
         {
             if (_languageRow == null) return;
 
-            int saved = PlayerPrefs.GetInt(PrefLanguage, 0);
-            saved = Mathf.Clamp(saved, 0, LanguageOptions.Length - 1);
-
-            _languageRow.SetOptions(LanguageOptions, saved);
+            _languageRow.SetOptions(SettingsService.LanguageLabels, _settings.LanguageIndex);
             _languageRow.OnValueChanged += OnLanguageChanged;
         }
 
-        private void LoadAndApplyVibration()
+        private void SetupVibrationToggle()
         {
             if (_vibrationToggle == null) return;
-            bool on = PlayerPrefs.GetInt(PrefVibration, 1) == 1;
-            _vibrationToggle.SetWithoutNotify(on);
+
+            _vibrationToggle.SetWithoutNotify(_settings.Vibration);
+            _vibrationToggle.OnValueChanged += OnVibrationChanged;
         }
 
-        private void LoadAndApplyScreenshake()
+        private void SetupScreenshakeToggle()
         {
             if (_screenshakeToggle == null) return;
-            bool on = PlayerPrefs.GetInt(PrefScreenshake, 1) == 1;
-            _screenshakeToggle.SetWithoutNotify(on);
+
+            _screenshakeToggle.SetWithoutNotify(_settings.Screenshake);
+            _screenshakeToggle.OnValueChanged += OnScreenshakeChanged;
         }
 
         // ─── Callbacks ──────────────────────────────────────────────
 
-        private void OnLanguageChanged(int index)
-        {
-            PlayerPrefs.SetInt(PrefLanguage, index);
-            PlayerPrefs.Save();
-            EventBus.Publish(new OnSettingsChangedEvent
-            {
-                Category = "Gameplay",
-                Key = "Language",
-                Value = index
-            });
-            GameLogger.Log("Settings", $"Language: {LanguageOptions[index]}");
-        }
+        private void OnLanguageChanged(int index) => _settings?.SetLanguageIndex(index);
 
-        private void OnVibrationChanged(bool value)
-        {
-            PlayerPrefs.SetInt(PrefVibration, value ? 1 : 0);
-            PlayerPrefs.Save();
-            EventBus.Publish(new OnSettingsChangedEvent
-            {
-                Category = "Gameplay",
-                Key = "Vibration",
-                Value = value ? 1f : 0f
-            });
-            GameLogger.Log("Settings", $"Controller Vibration: {(value ? "On" : "Off")}");
-        }
+        private void OnVibrationChanged(bool value) => _settings?.SetVibration(value);
 
-        private void OnScreenshakeChanged(bool value)
-        {
-            PlayerPrefs.SetInt(PrefScreenshake, value ? 1 : 0);
-            PlayerPrefs.Save();
-            EventBus.Publish(new OnSettingsChangedEvent
-            {
-                Category = "Gameplay",
-                Key = "Screenshake",
-                Value = value ? 1f : 0f
-            });
-            GameLogger.Log("Settings", $"Screenshake: {(value ? "On" : "Off")}");
-        }
+        private void OnScreenshakeChanged(bool value) => _settings?.SetScreenshake(value);
     }
 }

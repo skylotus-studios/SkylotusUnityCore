@@ -1,4 +1,4 @@
-﻿using TMPro;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,7 +6,10 @@ namespace Skylotus
 {
     /// <summary>
     /// Audio settings tab. Scroll list — each row has a label and a Slider (0–1).
-    /// Values are read from and written to <see cref="AudioManager"/> and persist via PlayerPrefs.
+    ///
+    /// Pure view code: every value is read from and written to <see cref="SettingsService"/>,
+    /// which owns the pref keys, applies each change to <see cref="AudioManager"/>, and decides
+    /// when to flush to disk. This tab touches <c>PlayerPrefs</c> nowhere.
     ///
     /// <b>Expected hierarchy:</b>
     /// <code>
@@ -35,23 +38,26 @@ namespace Skylotus
         [SerializeField] private TMP_Text _sfxLabel;
         [SerializeField] private TMP_Text _uiLabel;
 
-        // ─── Prefs Keys ─────────────────────────────────────────────
-
-        private const string PrefPrefix = "Settings_Audio_";
-
-        private AudioManager _audio;
+        /// <summary>Owner of the pref keys, the defaults, and the write-through to AudioManager.</summary>
+        private SettingsService _settings;
 
         // ─── Lifecycle ──────────────────────────────────────────────
 
         private void OnEnable()
         {
-            _audio = ServiceLocator.Get<AudioManager>();
+            if (!ServiceLocator.TryGet<SettingsService>(out _settings))
+            {
+                GameLogger.LogWarning("Settings",
+                    "No SettingsService registered — audio sliders will not persist. " +
+                    "Enter play mode from the boot scene.");
+                return;
+            }
 
-            LoadAndApply(AudioChannel.Master, _masterSlider, _masterLabel);
-            LoadAndApply(AudioChannel.Music, _musicSlider, _musicLabel);
-            LoadAndApply(AudioChannel.SFX, _sfxSlider, _sfxLabel);
-            LoadAndApply(AudioChannel.UI, _uiSlider, _uiLabel);
-            LoadAndApply(AudioChannel.Ambience, _ambienceSlider, _ambienceLabel);
+            Load(AudioChannel.Master, _masterSlider, _masterLabel);
+            Load(AudioChannel.Music, _musicSlider, _musicLabel);
+            Load(AudioChannel.SFX, _sfxSlider, _sfxLabel);
+            Load(AudioChannel.UI, _uiSlider, _uiLabel);
+            Load(AudioChannel.Ambience, _ambienceSlider, _ambienceLabel);
 
             WireCallbacks();
         }
@@ -59,21 +65,26 @@ namespace Skylotus
         private void OnDisable()
         {
             UnwireCallbacks();
+
+            // Closing the tab (or the whole settings screen) is the moment to pay for the disk
+            // write that every individual slider tick deliberately skipped.
+            _settings?.Flush();
         }
 
         // ─── Load ───────────────────────────────────────────────────
 
-        private void LoadAndApply(AudioChannel channel, Slider slider, TMP_Text label)
+        /// <summary>Show the saved volume for a channel without firing the change callback.</summary>
+        /// <param name="channel">The channel this row controls.</param>
+        /// <param name="slider">The row's slider, or null if the row is absent.</param>
+        /// <param name="label">Optional percentage label for the row.</param>
+        private void Load(AudioChannel channel, Slider slider, TMP_Text label)
         {
             if (slider == null) return;
 
-            float defaultVol = _audio != null ? _audio.GetVolume(channel) : 1f;
-            float saved = PlayerPrefs.GetFloat(PrefPrefix + channel, defaultVol);
+            float saved = _settings.GetVolume(channel);
 
             slider.SetValueWithoutNotify(saved);
             UpdateLabel(label, saved);
-
-            _audio?.SetVolume(channel, saved);
         }
 
         // ─── Callbacks ──────────────────────────────────────────────
@@ -98,11 +109,8 @@ namespace Skylotus
 
         private void OnVolumeChanged(AudioChannel channel, float value, TMP_Text label)
         {
-            _audio?.SetVolume(channel, value);
+            _settings?.SetVolume(channel, value);
             UpdateLabel(label, value);
-
-            PlayerPrefs.SetFloat(PrefPrefix + channel, value);
-            PlayerPrefs.Save();
         }
 
         // ─── Helpers ────────────────────────────────────────────────

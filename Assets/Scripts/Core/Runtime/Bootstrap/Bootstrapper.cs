@@ -13,18 +13,24 @@ namespace Skylotus
     /// 2. LitMotion (no initialization required)
     /// 3. SaveSystem
     /// 4. LocalizationSystem
-    /// 5. AudioManager
-    /// 6. ObjectPool
-    /// 7. SkylotusSceneManager
-    /// 8. GameStateMachine
-    /// 9. TimeManager
-    /// 10. InputManager (requires InputActionAsset)
-    /// 11. UIManager
-    /// 12. DialogueSystem
-    /// 13. NotificationSystem
-    /// 14. DebugConsole (optional)
+    /// 5. SettingsService
+    /// 6. AudioManager
+    /// 7. ObjectPool
+    /// 8. SkylotusSceneManager
+    /// 9. GameStateMachine
+    /// 10. TimeManager
+    /// 11. InputManager (requires InputActionAsset)
+    /// 12. UIManager
+    /// 13. DialogueSystem
+    /// 14. NotificationSystem
+    /// 15. DebugConsole (optional; editor and development builds only)
     ///
-    /// The MonoBehaviour-based systems (5–14) live on the <b>core systems prefab</b>
+    /// <see cref="SettingsService"/> is constructed early but only <b>applied</b> once the
+    /// MonoBehaviour systems are registered — it pushes saved volumes into
+    /// <see cref="AudioManager"/> — and always before <see cref="Start"/> loads the first scene,
+    /// so a relaunched game comes up at the volume, quality and resolution the player chose.
+    ///
+    /// The MonoBehaviour-based systems (6–15) live on the <b>core systems prefab</b>
     /// assigned to <c>_coreSystemsPrefab</c>, which is instantiated once at boot. That prefab
     /// is the only place their <c>[SerializeField]</c> values can be authored: a component added
     /// at runtime with <c>AddComponent</c> gets compile-time defaults for every serialized field,
@@ -34,12 +40,22 @@ namespace Skylotus
     /// If no prefab is assigned the bootstrapper falls back to building the systems in code so an
     /// un-migrated boot scene still runs — with every inspector value stuck at its default, which
     /// means no loading screen, no UI containers, and no audio/notification tuning.
+    ///
+    /// The <see cref="DebugConsole"/> is the one system that never reaches a release player:
+    /// every path that activates it, creates it, or registers commands on it is compiled behind
+    /// <c>#if UNITY_EDITOR || DEVELOPMENT_BUILD</c>, matching the guard inside
+    /// <see cref="DebugConsole"/> itself. In a release build the prefab's console object is
+    /// deactivated unconditionally, and the code-construction fallback never adds the component.
     /// </summary>
     public class Bootstrapper : MonoBehaviour
     {
         [Header("Systems Configuration")]
-        [Tooltip("Enable the in-game debug console (toggle with ` key).")]
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        [Tooltip("Enable the in-game debug console (toggle with ` key). Editor and development " +
+                 "builds only — the console is compiled out of release players, where this " +
+                 "field does not exist and the setting has no effect.")]
         [SerializeField] private bool _enableDebugConsole = true;
+#endif
 
         [Tooltip("Write log output to a timestamped file in Application.persistentDataPath/Logs.")]
         [SerializeField] private bool _enableFileLogging = false;
@@ -122,8 +138,8 @@ namespace Skylotus
         /// <summary>
         /// Create and register all core systems in dependency order.
         ///
-        /// The pure-C# systems (SaveSystem, LocalizationSystem) are constructed here because they
-        /// have no serialized state. Everything MonoBehaviour-shaped comes from
+        /// The pure-C# systems (SaveSystem, LocalizationSystem, SettingsService) are constructed
+        /// here because they have no serialized state. Everything MonoBehaviour-shaped comes from
         /// <c>_coreSystemsPrefab</c> when one is assigned, and from
         /// <see cref="RegisterSystemsFromCode"/> when it is not.
         /// </summary>
@@ -147,11 +163,22 @@ namespace Skylotus
             localization.SetLanguage(_defaultLanguage);
             ServiceLocator.Register(localization);
 
+            // ─── Settings ───────────────────────────────────────────
+            // Registered now so anything below can read a saved value; applied after the
+            // MonoBehaviour systems exist, because ApplyAll writes into AudioManager.
+            var settings = new SettingsService();
+            ServiceLocator.Register(settings);
+
             // ─── MonoBehaviour systems (audio → console) ────────────
             if (_coreSystemsPrefab != null)
                 RegisterSystemsFromPrefab();
             else
                 RegisterSystemsFromCode();
+
+            // ─── Saved Settings ─────────────────────────────────────
+            // Both registration paths have AudioManager up by here, and Start() has not yet run,
+            // so the first scene renders with the player's saved settings already in effect.
+            settings.ApplyAll();
 
             // ─── Event Queue Processor ──────────────────────────────
             gameObject.AddComponent<EventQueueProcessor>();
@@ -179,11 +206,19 @@ namespace Skylotus
             var root = Instantiate(_coreSystemsPrefab, staging.transform);
             root.name = "[Skylotus Core]";
 
-            // The console is opt-in. Deactivating it while the hierarchy is still dormant means
-            // its Awake never runs, so it never claims the static singleton slot.
+            // The console is opt-in, and only exists at all in the editor and development
+            // builds. Deactivating it while the hierarchy is still dormant means its Awake never
+            // runs, so it never claims the static singleton slot. A release player takes the
+            // second branch: the prefab still carries the component (the type is not stripped,
+            // only its behaviour is), so the object is deactivated unconditionally.
             var console = root.GetComponentInChildren<DebugConsole>(includeInactive: true);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (console != null && !_enableDebugConsole)
                 console.gameObject.SetActive(false);
+#else
+            if (console != null)
+                console.gameObject.SetActive(false);
+#endif
 
             // Leaving the dormant holder activates the hierarchy and runs every Awake.
             root.transform.SetParent(null, worldPositionStays: false);
@@ -240,6 +275,7 @@ namespace Skylotus
             RegisterFromPrefab<NotificationSystem>(root);
 
             // ─── Debug Console (last, so it can reference other systems) ─
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_enableDebugConsole)
             {
                 if (console == null)
@@ -250,6 +286,7 @@ namespace Skylotus
 
                 RegisterDebugCommands();
             }
+#endif
         }
 
         /// <summary>
@@ -356,12 +393,15 @@ namespace Skylotus
             ServiceLocator.Register(notificationSystem);
 
             // ─── Debug Console (last, so it can reference other systems) ─
+            // Editor and development builds only; a release player never creates the object.
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
             if (_enableDebugConsole)
             {
                 var consoleGo = CreateChild("DebugConsole");
                 consoleGo.AddComponent<DebugConsole>();
                 RegisterDebugCommands();
             }
+#endif
         }
 
         /// <summary>Create a child GameObject under the bootstrapper root.</summary>
@@ -374,7 +414,13 @@ namespace Skylotus
             return go;
         }
 
-        /// <summary>Register console commands that interact with core systems.</summary>
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        /// <summary>
+        /// Register console commands that interact with core systems. Compiled only into the
+        /// editor and development builds, matching <see cref="DebugConsole"/>'s own guard —
+        /// a release player has no console to register against, and these handlers (and the
+        /// systems they reach) never enter the shipped assembly.
+        /// </summary>
         private void RegisterDebugCommands()
         {
             DebugConsole.Register("state", "Show/set game state (state [newState])", args =>
@@ -437,13 +483,29 @@ namespace Skylotus
                 DebugConsole.Print($"Active motions: {MotionDebugger.Items.Count}");
             });
         }
+#endif
 
         /// <summary>
-        /// Unity OnApplicationQuit — clean up all static state to prevent
-        /// leaks between play-mode sessions in the editor.
+        /// Unity OnApplicationPause — commit any unsaved settings. On mobile this is the last
+        /// callback guaranteed to run before the OS may kill a backgrounded process, so it is
+        /// the only reliable place to flush; settings setters never write to disk themselves.
+        /// </summary>
+        /// <param name="pauseStatus">True when the application is going into the background.</param>
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (pauseStatus && ServiceLocator.TryGet<SettingsService>(out var settings))
+                settings.Flush();
+        }
+
+        /// <summary>
+        /// Unity OnApplicationQuit — flush pending settings, then clean up all static state to
+        /// prevent leaks between play-mode sessions in the editor.
         /// </summary>
         private void OnApplicationQuit()
         {
+            if (ServiceLocator.TryGet<SettingsService>(out var settings))
+                settings.Flush();
+
             EventBus.ClearAll();
             ServiceLocator.Reset();
             MotionDispatcher.Clear();

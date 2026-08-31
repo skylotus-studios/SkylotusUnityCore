@@ -53,6 +53,15 @@ namespace Skylotus
         private float _hitstopTimer;
 
         /// <summary>
+        /// Outstanding pause requests, one entry per owner. The game is paused while this
+        /// list is non-empty; see <see cref="PushPause"/>.
+        /// </summary>
+        private readonly List<object> _pauseTokens = new();
+
+        /// <summary>Owner token used by the parameterless <see cref="Pause"/>/<see cref="Resume"/> pair.</summary>
+        private readonly object _manualPauseOwner = new();
+
+        /// <summary>
         /// Game-level time scale (0–∞). Multiplied into Unity's Time.timeScale.
         /// Set to 0.3f for slow motion, 1f for normal, 2f for fast-forward.
         /// </summary>
@@ -65,6 +74,31 @@ namespace Skylotus
                 ApplyTimeScale();
             }
         }
+
+        /// <summary>
+        /// The time scale this manager wants Unity to run at, given the current state.
+        /// Precedence is hit-stop, then pause requests, then <see cref="GameTimeScale"/> — so a
+        /// hit-stop expiring during a pause leaves the game paused, and releasing the last pause
+        /// returns to the game time scale rather than a hardcoded 1.
+        /// </summary>
+        public float EffectiveTimeScale
+        {
+            get
+            {
+                if (_hitstopTimer > 0f) return 0f;
+                if (_pauseTokens.Count > 0) return 0f;
+                return _gameTimeScale;
+            }
+        }
+
+        /// <summary>True while at least one owner holds a pause request.</summary>
+        public bool IsPaused => _pauseTokens.Count > 0;
+
+        /// <summary>Number of distinct owners currently holding a pause request.</summary>
+        public int PauseRequestCount => _pauseTokens.Count;
+
+        /// <summary>True while a hit-stop freeze is still counting down.</summary>
+        public bool IsHitStopped => _hitstopTimer > 0f;
 
         /// <summary>Shortcut for Time.unscaledTime.</summary>
         public float UnscaledTime => Time.unscaledTime;
@@ -179,13 +213,17 @@ namespace Skylotus
 
         /// <summary>
         /// Freeze time for a brief duration (hit impact / parry effect).
-        /// Sets Time.timeScale to 0, then restores after <paramref name="duration"/> real seconds.
+        /// Time resumes at the effective scale after <paramref name="duration"/> real seconds —
+        /// which is still frozen if a pause request is outstanding when the freeze expires.
+        /// Overlapping hit-stops extend the freeze rather than truncating it.
         /// </summary>
-        /// <param name="duration">Freeze duration in real (unscaled) seconds.</param>
+        /// <param name="duration">Freeze duration in real (unscaled) seconds. Values of 0 or less do nothing.</param>
         public void HitStop(float duration)
         {
-            _hitstopTimer = duration;
-            Time.timeScale = 0f;
+            if (duration <= 0f) return;
+
+            _hitstopTimer = Mathf.Max(_hitstopTimer, duration);
+            ApplyTimeScale();
         }
 
         /// <summary>
@@ -200,16 +238,81 @@ namespace Skylotus
                 useUnscaledTime: true);
         }
 
-        /// <summary>Pause the game by setting Time.timeScale to 0.</summary>
-        public void Pause()
+        // ─── Pause Requests ─────────────────────────────────────────
+
+        /// <summary>
+        /// Request that the game be paused on behalf of <paramref name="owner"/>.
+        /// Requests compose: the game stays paused until every owner has released, so two
+        /// overlapping pausing modals cannot overwrite one another. The call is idempotent —
+        /// pushing twice for the same owner still needs only one <see cref="ReleasePause"/>.
+        /// </summary>
+        /// <param name="owner">
+        /// The object requesting the pause, typically the modal or system that opened it.
+        /// Destroyed Unity objects are dropped automatically so a leaked request cannot freeze
+        /// the game forever.
+        /// </param>
+        public void PushPause(object owner)
         {
-            Time.timeScale = 0f;
+            if (owner == null)
+            {
+                GameLogger.LogError("Time", "PushPause called with a null owner; ignoring");
+                return;
+            }
+
+            if (_pauseTokens.Contains(owner)) return;
+
+            _pauseTokens.Add(owner);
+            ApplyTimeScale();
         }
 
-        /// <summary>Resume from a paused state by re-applying the game time scale.</summary>
+        /// <summary>
+        /// Release a pause request previously taken by <paramref name="owner"/>.
+        /// Does nothing if that owner holds no request. When the last request is released the
+        /// game returns to <see cref="GameTimeScale"/>, never a hardcoded 1.
+        /// </summary>
+        /// <param name="owner">The object whose pause request should be dropped.</param>
+        public void ReleasePause(object owner)
+        {
+            if (owner == null) return;
+            if (!_pauseTokens.Remove(owner)) return;
+
+            ApplyTimeScale();
+        }
+
+        /// <summary>
+        /// Drop every outstanding pause request. Intended for hard resets such as a scene
+        /// transition that tears down the UI mid-modal; prefer <see cref="ReleasePause"/>.
+        /// </summary>
+        public void ReleaseAllPauses()
+        {
+            if (_pauseTokens.Count == 0) return;
+
+            _pauseTokens.Clear();
+            ApplyTimeScale();
+        }
+
+        /// <summary>Check whether <paramref name="owner"/> currently holds a pause request.</summary>
+        /// <param name="owner">The owner to look up.</param>
+        /// <returns>True if that owner has an outstanding request.</returns>
+        public bool HasPauseRequest(object owner) => owner != null && _pauseTokens.Contains(owner);
+
+        /// <summary>
+        /// Pause the game on this manager's own behalf. Equivalent to <see cref="PushPause"/>
+        /// with an internal owner; release it with <see cref="Resume"/>.
+        /// </summary>
+        public void Pause()
+        {
+            PushPause(_manualPauseOwner);
+        }
+
+        /// <summary>
+        /// Release the pause taken by <see cref="Pause"/>. Requests held by other owners — an
+        /// open modal, for instance — are left untouched, so the game only resumes once nothing
+        /// else is asking for a pause.
+        /// </summary>
         public void Resume()
         {
-            ApplyTimeScale();
+            ReleasePause(_manualPauseOwner);
         }
 
         // ─── Update Loop ────────────────────────────────────────────
@@ -217,12 +320,14 @@ namespace Skylotus
         /// <summary>Unity Update — tick all timers and cooldowns, handle hit-stop expiry.</summary>
         private void Update()
         {
+            // Drop pause requests whose owner was destroyed without releasing
+            if (_pauseTokens.Count > 0 && PrunePauseTokens())
+                ApplyTimeScale();
+
             // Handle hit-stop countdown (runs in unscaled time)
             if (_hitstopTimer > 0f)
             {
-                _hitstopTimer -= Time.unscaledDeltaTime;
-                if (_hitstopTimer <= 0f)
-                    ApplyTimeScale();
+                AdvanceHitStop(Time.unscaledDeltaTime);
                 return; // Skip timer/cooldown updates while frozen
             }
 
@@ -271,10 +376,55 @@ namespace Skylotus
             foreach (var id in _toRemove) _cooldowns.Remove(id);
         }
 
-        /// <summary>Apply the game time scale to Unity's Time.timeScale.</summary>
+        /// <summary>
+        /// Advance the hit-stop countdown by <paramref name="unscaledDelta"/> real seconds and
+        /// restore the effective time scale once it expires.
+        /// </summary>
+        /// <param name="unscaledDelta">Elapsed real time in seconds.</param>
+        private void AdvanceHitStop(float unscaledDelta)
+        {
+            _hitstopTimer -= unscaledDelta;
+            if (_hitstopTimer > 0f) return;
+
+            _hitstopTimer = 0f;
+            ApplyTimeScale();
+        }
+
+        /// <summary>
+        /// Remove pause requests whose owner is a destroyed Unity object — a modal torn down by
+        /// a scene load, say — so the game cannot stay frozen with nothing left to release it.
+        /// </summary>
+        /// <returns>True if at least one request was dropped.</returns>
+        private bool PrunePauseTokens()
+        {
+            bool removedAny = false;
+
+            for (int i = _pauseTokens.Count - 1; i >= 0; i--)
+            {
+                object owner = _pauseTokens[i];
+                bool isDead = owner == null ||
+                              (owner is UnityEngine.Object unityOwner && unityOwner == null);
+
+                if (!isDead) continue;
+
+                _pauseTokens.RemoveAt(i);
+                removedAny = true;
+            }
+
+            if (removedAny)
+                GameLogger.LogWarning("Time", "Dropped pause request(s) whose owner was destroyed");
+
+            return removedAny;
+        }
+
+        /// <summary>
+        /// Write the single authoritative value of Unity's Time.timeScale. This is the only
+        /// assignment to Time.timeScale among the core runtime systems — everything else
+        /// requests a state change and lets this method resolve it.
+        /// </summary>
         private void ApplyTimeScale()
         {
-            Time.timeScale = _gameTimeScale;
+            Time.timeScale = EffectiveTimeScale;
         }
     }
 }

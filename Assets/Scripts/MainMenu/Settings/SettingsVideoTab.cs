@@ -1,4 +1,3 @@
-﻿using System.Collections.Generic;
 using Skylotus.Core.UI;
 using TMPro;
 using UnityEngine;
@@ -8,8 +7,11 @@ namespace Skylotus
 {
     /// <summary>
     /// Video/Display settings tab. Scroll list of rows — each row has a label and one control.
-    /// All changes apply immediately and are saved to PlayerPrefs on change.
-    /// No Apply button; the global Save &amp; Exit on the settings screen commits the session.
+    ///
+    /// Pure view code: the option lists, the saved indices, the pref keys and the application of
+    /// each change to <c>Screen</c> / <c>QualitySettings</c> all live in
+    /// <see cref="SettingsService"/>. This tab touches <c>PlayerPrefs</c> nowhere, and the values
+    /// it shows are the same ones the service already applied at boot.
     ///
     /// <b>Expected hierarchy:</b>
     /// <code>
@@ -32,44 +34,26 @@ namespace Skylotus
         [SerializeField] private Slider _brightnessSlider;
         [SerializeField] private TMP_Text _brightnessValueLabel;
 
-        // ─── Prefs Keys ─────────────────────────────────────────────
-
-        private const string PrefResolution = "Settings_Resolution";
-        private const string PrefFullscreen = "Settings_Fullscreen";
-        private const string PrefVSync = "Settings_VSync";
-        private const string PrefQuality = "Settings_Quality";
-        private const string PrefBrightness = "Settings_Brightness";
-
-        // ─── Data ────────────────────────────────────────────────────
-
-        private readonly List<Resolution> _resolutions = new();
-
-        private static readonly string[] FullscreenOptions =
-        {
-            "Fullscreen",
-            "Borderless",
-            "Windowed"
-        };
-
-        private static readonly FullScreenMode[] FullscreenModes =
-        {
-            FullScreenMode.ExclusiveFullScreen,
-            FullScreenMode.FullScreenWindow,
-            FullScreenMode.Windowed
-        };
+        /// <summary>Owner of the pref keys, the option lists, and the write-through to Unity.</summary>
+        private SettingsService _settings;
 
         // ─── Lifecycle ──────────────────────────────────────────────
 
         private void OnEnable()
         {
+            if (!ServiceLocator.TryGet<SettingsService>(out _settings))
+            {
+                GameLogger.LogWarning("Settings",
+                    "No SettingsService registered — video settings will not persist. " +
+                    "Enter play mode from the boot scene.");
+                return;
+            }
+
             SetupResolutionRow();
             SetupFullscreenRow();
             SetupQualityRow();
-            LoadAndApplyVSync();
-            LoadAndApplyBrightness();
-
-            if (_vsyncToggle != null) _vsyncToggle.OnValueChanged += OnVSyncChanged;
-            _brightnessSlider?.onValueChanged.AddListener(OnBrightnessChanged);
+            SetupVSyncToggle();
+            SetupBrightnessSlider();
         }
 
         private void OnDisable()
@@ -80,6 +64,10 @@ namespace Skylotus
 
             if (_vsyncToggle != null) _vsyncToggle.OnValueChanged -= OnVSyncChanged;
             _brightnessSlider?.onValueChanged.RemoveListener(OnBrightnessChanged);
+
+            // Closing the tab (or the whole settings screen) is the moment to pay for the disk
+            // write that every individual slider tick deliberately skipped.
+            _settings?.Flush();
         }
 
         // ─── Setup ──────────────────────────────────────────────────
@@ -88,36 +76,7 @@ namespace Skylotus
         {
             if (_resolutionRow == null) return;
 
-            _resolutions.Clear();
-            var labels = new List<string>();
-            var seen = new HashSet<string>();
-
-            foreach (var res in Screen.resolutions)
-            {
-                string key = $"{res.width}x{res.height}";
-                if (seen.Add(key))
-                {
-                    _resolutions.Add(res);
-                    labels.Add($"{res.width} × {res.height}");
-                }
-            }
-
-            int saved = PlayerPrefs.GetInt(PrefResolution, -1);
-            if (saved < 0 || saved >= _resolutions.Count)
-            {
-                saved = 0;
-                for (int i = 0; i < _resolutions.Count; i++)
-                {
-                    if (_resolutions[i].width == Screen.currentResolution.width &&
-                        _resolutions[i].height == Screen.currentResolution.height)
-                    {
-                        saved = i;
-                        break;
-                    }
-                }
-            }
-
-            _resolutionRow.SetOptions(labels.ToArray(), saved);
+            _resolutionRow.SetOptions(_settings.ResolutionLabels, _settings.ResolutionIndex);
             _resolutionRow.OnValueChanged += OnResolutionChanged;
         }
 
@@ -125,19 +84,7 @@ namespace Skylotus
         {
             if (_fullscreenRow == null) return;
 
-            int saved = PlayerPrefs.GetInt(PrefFullscreen, -1);
-            if (saved < 0 || saved >= FullscreenOptions.Length)
-            {
-                saved = Screen.fullScreenMode switch
-                {
-                    FullScreenMode.ExclusiveFullScreen => 0,
-                    FullScreenMode.FullScreenWindow => 1,
-                    FullScreenMode.Windowed => 2,
-                    _ => 1
-                };
-            }
-
-            _fullscreenRow.SetOptions(FullscreenOptions, saved);
+            _fullscreenRow.SetOptions(SettingsService.FullscreenOptions, _settings.FullscreenIndex);
             _fullscreenRow.OnValueChanged += OnFullscreenChanged;
         }
 
@@ -145,79 +92,46 @@ namespace Skylotus
         {
             if (_qualityRow == null) return;
 
-            int saved = PlayerPrefs.GetInt(PrefQuality, QualitySettings.GetQualityLevel());
-            saved = Mathf.Clamp(saved, 0, QualitySettings.names.Length - 1);
-
-            _qualityRow.SetOptions(QualitySettings.names, saved);
+            _qualityRow.SetOptions(QualitySettings.names, _settings.QualityIndex);
             _qualityRow.OnValueChanged += OnQualityChanged;
         }
 
-        private void LoadAndApplyVSync()
+        private void SetupVSyncToggle()
         {
             if (_vsyncToggle == null) return;
-            bool vsync = PlayerPrefs.GetInt(PrefVSync, QualitySettings.vSyncCount > 0 ? 1 : 0) == 1;
-            _vsyncToggle.SetWithoutNotify(vsync);
-            QualitySettings.vSyncCount = vsync ? 1 : 0;
+
+            _vsyncToggle.SetWithoutNotify(_settings.VSync);
+            _vsyncToggle.OnValueChanged += OnVSyncChanged;
         }
 
-        private void LoadAndApplyBrightness()
+        private void SetupBrightnessSlider()
         {
             if (_brightnessSlider == null) return;
-            float brightness = PlayerPrefs.GetFloat(PrefBrightness, 1f);
+
+            float brightness = _settings.Brightness;
             _brightnessSlider.SetValueWithoutNotify(brightness);
             UpdateLabel(_brightnessValueLabel, brightness);
+
+            _brightnessSlider.onValueChanged.AddListener(OnBrightnessChanged);
         }
 
         // ─── Callbacks ──────────────────────────────────────────────
 
-        private void OnResolutionChanged(int index)
-        {
-            if (index < 0 || index >= _resolutions.Count) return;
-            var res = _resolutions[index];
-            var mode = FullscreenModes[Mathf.Clamp(_fullscreenRow != null ? _fullscreenRow.Index : 1, 0, FullscreenModes.Length - 1)];
-            Screen.SetResolution(res.width, res.height, mode);
-            PlayerPrefs.SetInt(PrefResolution, index);
-            PlayerPrefs.Save();
-            GameLogger.Log("Settings", $"Resolution: {res.width}×{res.height}");
-        }
+        private void OnResolutionChanged(int index) => _settings?.SetResolutionIndex(index);
 
-        private void OnFullscreenChanged(int index)
-        {
-            if (index < 0 || index >= FullscreenModes.Length) return;
-            Screen.fullScreenMode = FullscreenModes[index];
-            PlayerPrefs.SetInt(PrefFullscreen, index);
-            PlayerPrefs.Save();
-            GameLogger.Log("Settings", $"Fullscreen: {FullscreenOptions[index]}");
-        }
+        private void OnFullscreenChanged(int index) => _settings?.SetFullscreenIndex(index);
 
-        private void OnQualityChanged(int index)
-        {
-            QualitySettings.SetQualityLevel(index, true);
-            PlayerPrefs.SetInt(PrefQuality, index);
-            PlayerPrefs.Save();
-            GameLogger.Log("Settings", $"Quality: {QualitySettings.names[index]}");
-        }
+        private void OnQualityChanged(int index) => _settings?.SetQualityIndex(index);
 
-        private void OnVSyncChanged(bool value)
-        {
-            QualitySettings.vSyncCount = value ? 1 : 0;
-            PlayerPrefs.SetInt(PrefVSync, value ? 1 : 0);
-            PlayerPrefs.Save();
-            GameLogger.Log("Settings", $"VSync: {(value ? "On" : "Off")}");
-        }
+        private void OnVSyncChanged(bool value) => _settings?.SetVSync(value);
 
         private void OnBrightnessChanged(float value)
         {
-            PlayerPrefs.SetFloat(PrefBrightness, value);
-            PlayerPrefs.Save();
-            EventBus.Publish(new OnSettingsChangedEvent
-            {
-                Category = "Video",
-                Key = "Brightness",
-                Value = value
-            });
+            _settings?.SetBrightness(value);
             UpdateLabel(_brightnessValueLabel, value);
         }
+
+        // ─── Helpers ────────────────────────────────────────────────
 
         private static void UpdateLabel(TMP_Text label, float value)
         {

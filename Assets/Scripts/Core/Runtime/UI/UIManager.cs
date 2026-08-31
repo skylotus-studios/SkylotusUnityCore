@@ -13,7 +13,7 @@ namespace Skylotus
     {
         [SerializeField] private CanvasGroup _canvasGroup;
 
-        [Tooltip("If true, Time.timeScale is set to 0 while this screen is open.")]
+        [Tooltip("If true, the game is paused (via TimeManager) while this screen is open.")]
         [SerializeField] private bool _pauseGameWhenOpen;
 
         /// <summary>The CanvasGroup used for fade transitions. Auto-fetched if not assigned.</summary>
@@ -247,7 +247,7 @@ namespace Skylotus
             _activeModals.Add(modal);
 
             if (modal.PauseGameWhenOpen)
-                Time.timeScale = 0f;
+                RequestPause(modal);
         }
 
         /// <summary>
@@ -306,7 +306,7 @@ namespace Skylotus
             _isTransitioning = false;
         }
 
-        /// <summary>Fade out a modal, deactivate it, and restore time scale if needed.</summary>
+        /// <summary>Fade out a modal, deactivate it, and release its pause request if it held one.</summary>
         private IEnumerator CloseModalRoutine(UIScreen modal)
         {
             if (modal.CanvasGroup != null)
@@ -316,14 +316,44 @@ namespace Skylotus
             modal.gameObject.SetActive(false);
             _activeModals.Remove(modal);
 
-            // Restore time only if no remaining modals request pause
-            bool anyPausing = false;
-            foreach (var m in _activeModals)
-                if (m.PauseGameWhenOpen) { anyPausing = true; break; }
-
-            if (!anyPausing)
-                Time.timeScale = 1f;
+            // Release only this modal's own request. Pauses held by other modals — or by
+            // gameplay, or an in-flight slow motion — are none of this modal's business.
+            ReleasePause(modal);
         }
+
+        // ─── Pause Plumbing ─────────────────────────────────────────
+
+        /// <summary>
+        /// Ask <see cref="TimeManager"/> to pause the game on <paramref name="modal"/>'s behalf.
+        /// The UI never writes Unity's time scale itself: TimeManager is its sole writer, so
+        /// overlapping modals, a gameplay pause and an active slow motion all compose instead of
+        /// overwriting one another.
+        /// </summary>
+        /// <param name="modal">The modal requesting the pause; also the release token.</param>
+        private void RequestPause(UIScreen modal)
+        {
+            if (!ServiceLocator.TryGet<TimeManager>(out var time))
+            {
+                GameLogger.LogWarning("UI",
+                    $"Modal '{modal.name}' wants to pause the game but no TimeManager is registered");
+                return;
+            }
+
+            time.PushPause(modal);
+        }
+
+        /// <summary>
+        /// Release the pause request <paramref name="modal"/> took in <see cref="RequestPause"/>.
+        /// Safe to call for a modal that never paused — TimeManager ignores unknown owners.
+        /// </summary>
+        /// <param name="modal">The modal whose pause request should be dropped.</param>
+        private void ReleasePause(UIScreen modal)
+        {
+            if (ServiceLocator.TryGet<TimeManager>(out var time))
+                time.ReleasePause(modal);
+        }
+
+        // ─── Transition Helpers ─────────────────────────────────────
 
         /// <summary>Linearly fade a CanvasGroup's alpha, handling interactable/blocksRaycasts.</summary>
         private IEnumerator FadeCanvasGroup(CanvasGroup cg, float from, float to, float dur)
