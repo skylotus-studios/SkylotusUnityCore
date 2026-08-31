@@ -4,8 +4,6 @@
   "references": [
     "Unity.InputSystem",
     "Unity.TextMeshPro",
-    "Unity.Addressables",
-    "Unity.ResourceManager",
     "LitMotion",
     "LitMotion.Extensions"
   ],

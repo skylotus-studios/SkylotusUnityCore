@@ -509,7 +509,7 @@ namespace Skylotus
 
     // ─── Common Built-In Events ─────────────────────────────────────
 
-    /// <summary>Raised when a scene finishes loading via <see cref="SceneManager"/>.</summary>
+    /// <summary>Raised when a scene finishes loading via <see cref="SkylotusSceneManager"/>.</summary>
     public struct OnSceneLoadedEvent : IGameEvent
     {
         /// <summary>The name of the scene that was loaded.</summary>

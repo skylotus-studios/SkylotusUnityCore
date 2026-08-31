@@ -159,7 +159,7 @@ namespace Skylotus.Editor
         ///
         /// This exists because a component added at runtime with <c>AddComponent</c> gets the
         /// compile-time default of every <c>[SerializeField]</c> and there is no way to author
-        /// those values — which is why <c>SceneManager</c>'s loading screen and
+        /// those values — which is why <c>SkylotusSceneManager</c>'s loading screen and
         /// <c>UIManager</c>'s containers were permanently null. Putting the systems on a prefab
         /// makes their serialized state real and editable.
         ///
@@ -244,11 +244,11 @@ namespace Skylotus.Editor
             problems += RequireComponent<NotificationSystem>(prefab);
             problems += RequireComponent<DebugConsole>(prefab);
 
-            var sceneManager = prefab.GetComponentInChildren<SceneManager>(true);
+            var sceneManager = prefab.GetComponentInChildren<SkylotusSceneManager>(true);
             var uiManager = prefab.GetComponentInChildren<UIManager>(true);
             var inputManager = prefab.GetComponentInChildren<InputManager>(true);
 
-            problems += RequireComponent<SceneManager>(prefab);
+            problems += RequireComponent<SkylotusSceneManager>(prefab);
             problems += RequireComponent<UIManager>(prefab);
             problems += RequireComponent<InputManager>(prefab);
 
@@ -351,7 +351,7 @@ namespace Skylotus.Editor
             // ─── Systems with no serialized references ──────────────
             var audioManager = NewChild(root.transform, "AudioManager").AddComponent<AudioManager>();
             NewChild(root.transform, "ObjectPool").AddComponent<ObjectPool>();
-            var sceneManager = NewChild(root.transform, "SceneManager").AddComponent<SceneManager>();
+            var sceneManager = NewChild(root.transform, "SceneManager").AddComponent<SkylotusSceneManager>();
             NewChild(root.transform, "GameState").AddComponent<GameStateMachine>();
             NewChild(root.transform, "TimeManager").AddComponent<TimeManager>();
             var inputManager = NewChild(root.transform, "InputManager").AddComponent<InputManager>();
@@ -376,7 +376,7 @@ namespace Skylotus.Editor
 
             var progressBar = BuildProgressBar(loadingCanvas.transform);
 
-            // Authored inactive so nothing flashes on screen during boot. SceneManager.Awake
+            // Authored inactive so nothing flashes on screen during boot. SkylotusSceneManager.Awake
             // deactivates it too, but only after one Awake's worth of frames.
             loadingCanvas.gameObject.SetActive(false);
 

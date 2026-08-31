@@ -225,7 +225,7 @@ namespace Skylotus
             {
                 if (args.Length > 0)
                 {
-                    var mgr = ServiceLocator.Get<SceneManager>();
+                    var mgr = ServiceLocator.Get<SkylotusSceneManager>();
                     mgr.LoadScene(args[0]);
                     Print($"Loading scene: {args[0]}");
                 }

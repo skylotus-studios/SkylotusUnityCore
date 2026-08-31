@@ -1,7 +1,7 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
-using UnitySceneManager = UnityEngine.SceneManagement.SceneManager;
+using UnityEngine.SceneManagement;
 
 namespace Skylotus.Editor
 {
@@ -17,9 +17,9 @@ namespace Skylotus.Editor
             int count = 0;
 
             // Search every loaded scene
-            for (int s = 0; s < UnitySceneManager.sceneCount; s++)
+            for (int s = 0; s < SceneManager.sceneCount; s++)
             {
-                var scene = UnitySceneManager.GetSceneAt(s);
+                var scene = SceneManager.GetSceneAt(s);
                 foreach (var root in scene.GetRootGameObjects())
                 {
                     foreach (var btn in root.GetComponentsInChildren<ButtonExtended>(includeInactive: true))

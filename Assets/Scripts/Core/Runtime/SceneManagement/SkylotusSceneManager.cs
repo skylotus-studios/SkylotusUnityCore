@@ -16,7 +16,7 @@ namespace Skylotus
     /// instant cuts; <see cref="LoadScene"/> then logs a warning instead of silently skipping
     /// the overlay.
     /// </summary>
-    public class SceneManager : MonoBehaviour
+    public class SkylotusSceneManager : MonoBehaviour
     {
         [Header("Loading Screen")]
         [Tooltip("CanvasGroup used for the loading screen fade overlay.")]
@@ -58,7 +58,7 @@ namespace Skylotus
         /// <summary>Unity Awake — capture the initial scene and hide the loading screen.</summary>
         private void Awake()
         {
-            _currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+            _currentScene = SceneManager.GetActiveScene().name;
 
             if (_loadingScreen != null)
             {
@@ -147,7 +147,7 @@ namespace Skylotus
             else if (showLoading)
             {
                 // Silently skipping the overlay is how this went unnoticed for so long: a
-                // code-constructed SceneManager has no serialized data, so _loadingScreen is
+                // code-constructed SkylotusSceneManager has no serialized data, so _loadingScreen is
                 // always null and every showLoadingScreen:true call was a no-op.
                 GameLogger.LogWarning("Scene",
                     $"'{sceneName}' requested a loading screen but none is assigned. " +
@@ -157,7 +157,7 @@ namespace Skylotus
             float startTime = Time.unscaledTime;
 
             // Begin async load — hold activation until we're ready
-            var op = UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(sceneName, mode);
+            var op = SceneManager.LoadSceneAsync(sceneName, mode);
             op.allowSceneActivation = false;
 
             // Report progress (Unity caps at 0.9 until activation is allowed)
@@ -201,7 +201,7 @@ namespace Skylotus
         private IEnumerator UnloadSceneRoutine(string sceneName, Action onComplete)
         {
             OnSceneUnloading?.Invoke(sceneName);
-            var op = UnityEngine.SceneManagement.SceneManager.UnloadSceneAsync(sceneName);
+            var op = SceneManager.UnloadSceneAsync(sceneName);
 
             if (op == null)
             {

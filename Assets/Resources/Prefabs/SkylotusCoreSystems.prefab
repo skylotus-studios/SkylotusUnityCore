@@ -972,7 +972,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: bf626b1743ce8804c876586824100908, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Skylotus.Core.Runtime::Skylotus.SceneManager
+  m_EditorClassIdentifier: Skylotus.Core.Runtime::Skylotus.SkylotusSceneManager
   _loadingScreen: {fileID: 2170309292579674585}
   _progressBar: {fileID: 2751838070560388127}
   _fadeDuration: 0.4

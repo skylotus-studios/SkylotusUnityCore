@@ -295,6 +295,55 @@ this for six tests including WP-7's scene-load survival and WP-1's loading scree
 whose original authors could only reason about them. That practice is what turned this suite from
 "green" into "green and meaningful", and it is worth making mandatory.
 
+## Wave 4 outcome (2026-08-31) — all 20 packages complete
+
+WP-10 landed. **`ValidateAssemblyReferences` now exits 0** — it had failed since WP-0, where it was
+written specifically as this package's regression test. Full gate verified independently:
+compile 0, EditMode 108/108, PlayMode 45/45.
+
+The `Skylotus.SceneManager` collision is gone: **no file under `Assets/` writes
+`UnityEngine.SceneManagement.SceneManager` any more**, and four files that had been avoiding the
+`using` because of the collision now use the plain name. `ButtonExtendedRepair.cs`'s
+`UnitySceneManager` alias — which existed only to work around it — is deleted.
+
+### A correction to this document
+
+WP-10 reported that `ValidateLocalization`, `ValidateTimeScale` and `ValidateSettings` do not exist,
+though the wave-1 and wave-2 outcomes above record running them. **Both are true.** They existed and
+passed when those notes were written; **WP-12 then ported their assertions into the NUnit suites and
+deleted the files**, exactly as instructed. The notes are stale, not wrong. The surviving
+`-executeMethod` validators are `CompileCheck`, `ValidateAssemblyReferences`,
+`ValidateCoreSystemsPrefab`, `ValidateAudioMixer`, `ValidateBrightness`,
+`VerifyReleaseConsoleStripped`, `ConfigureProject`, `GenerateCoreSystemsPrefab`,
+`GenerateAudioMixer`, `GenerateBrightnessProfile`, and the build entry points.
+
+### One flaky test — a real CI risk
+
+`EventBusTests.EnqueueThenProcessQueue_AllocatesNothingPerEvent` is **not deterministic**. WP-10
+observed 2 failures in 7 runs; both were on the **first EditMode run after a script recompile**, and
+both passed on an immediate re-run with no source change. WP-10 confirmed it is not caused by its own
+work by stashing everything and reproducing against the clean tree at `7108cd6`.
+
+Four further runs here all passed — but **that is not a refutation**: those runs had no source
+changes between them, so the recompile trigger never occurred. **CI compiles fresh on every run**, so
+this is more likely to fire there than locally.
+
+Likely mechanism: `Is.Not.AllocatingGCMemory()` is backed by a **process-wide** GC.Alloc profiler
+recorder, so Editor-side allocations inside the sampled window get attributed to the measured
+delegate. Do **not** "fix" it by widening the tolerance — that silently guts a WP-8 acceptance
+criterion, and this is the same assertion that already caught itself being vacuous once. Diagnosing
+it properly is its own work package.
+
+### Two more README claims were false
+
+Beyond the known list, WP-10 found by reading source that `NotificationSystem` has **no priority
+stacking** — it is FIFO with a `_maxVisible` cap, and the class's own summary repeats the false
+claim — and that `SettingsScreen.OnSave()` calls `PlayerPrefs.Save()` directly rather than
+`SettingsService.Flush()`, bypassing the dirty flag. Both are documented rather than fixed.
+
+Also still stale: `ServiceLocator.Get<T>()`'s exception message says "Did you forget to register it
+in SkylotusBootstrapper?" — a type that has not existed since before wave 1.
+
 ### Integration gap closed after the fact
 
 WP-9 could not wire its mixer onto the core systems prefab (WP-1's file) and flagged it as "one

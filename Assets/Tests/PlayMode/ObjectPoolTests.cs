@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
 namespace Skylotus.Tests.PlayMode
@@ -336,7 +337,7 @@ namespace Skylotus.Tests.PlayMode
             Assert.AreEqual(50, _pool.GetActiveCount(_prefab), "Setup: 50 instances should be active.");
             CollectionAssert.DoesNotContain(spawned, null, "Setup: every spawn should have succeeded.");
 
-            var activeScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var activeScene = SceneManager.GetActiveScene();
             foreach (var instance in spawned)
             {
                 Assert.AreEqual(activeScene, instance.scene,
@@ -344,11 +345,10 @@ namespace Skylotus.Tests.PlayMode
             }
 
             // A single-mode load destroys the active scene's contents, taking the 50 with it.
-            yield return UnityEngine.SceneManagement.SceneManager.LoadSceneAsync(
-                SurvivalScene, UnityEngine.SceneManagement.LoadSceneMode.Single);
+            yield return SceneManager.LoadSceneAsync(SurvivalScene, LoadSceneMode.Single);
             yield return null;
 
-            Assert.AreEqual(SurvivalScene, UnityEngine.SceneManagement.SceneManager.GetActiveScene().name,
+            Assert.AreEqual(SurvivalScene, SceneManager.GetActiveScene().name,
                 "Setup: the scene should actually have changed.");
 
             foreach (var instance in spawned)

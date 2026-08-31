@@ -86,7 +86,7 @@ public class MainMenuScreen : UIScreen
     {
         GameLogger.Log("MainMenu", "Play pressed");
 
-        var sceneManager = ServiceLocator.Get<SceneManager>();
+        var sceneManager = ServiceLocator.Get<SkylotusSceneManager>();
         if (sceneManager != null)
             sceneManager.LoadScene(_gameplayScene);
         else

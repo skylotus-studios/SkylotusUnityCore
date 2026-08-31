@@ -126,7 +126,7 @@ namespace Skylotus
         {
             if (!string.IsNullOrEmpty(_firstScene))
             {
-                var sceneManager = ServiceLocator.Get<SceneManager>();
+                var sceneManager = ServiceLocator.Get<SkylotusSceneManager>();
                 if (sceneManager != null)
                 {
                     GameLogger.Log("Core", $"Loading first scene: {_firstScene}");
@@ -232,7 +232,7 @@ namespace Skylotus
             RegisterFromPrefab<ObjectPool>(root);
 
             // ─── Scene Manager ──────────────────────────────────────
-            RegisterFromPrefab<SceneManager>(root);
+            RegisterFromPrefab<SkylotusSceneManager>(root);
 
             // ─── Game State ─────────────────────────────────────────
             RegisterFromPrefab<GameStateMachine>(root);
@@ -341,7 +341,7 @@ namespace Skylotus
 
             // ─── Scene Manager ──────────────────────────────────────
             var sceneGo = CreateChild("SceneManager");
-            var sceneManager = sceneGo.AddComponent<SceneManager>();
+            var sceneManager = sceneGo.AddComponent<SkylotusSceneManager>();
             ServiceLocator.Register(sceneManager);
 
             // ─── Game State ─────────────────────────────────────────

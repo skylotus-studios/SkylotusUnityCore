@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 using UnityEngine.UI;
 
@@ -17,10 +18,10 @@ namespace Skylotus.Tests.PlayMode
     /// scene with <c>showLoadingScreen: false</c>, so before this fixture existed the overlay had
     /// never run once. These tests drive it directly.
     ///
-    /// <b>Isolation.</b> The <see cref="SceneManager"/> used here is the registered one — the whole
+    /// <b>Isolation.</b> The <see cref="SkylotusSceneManager"/> used here is the registered one — the whole
     /// point of the criterion is that its serialized loading-screen references, which only exist
     /// because WP-1 moved the systems onto a prefab, are real. A privately constructed
-    /// <c>SceneManager</c> would have the null references WP-1 removed and would prove nothing.
+    /// <c>SkylotusSceneManager</c> would have the null references WP-1 removed and would prove nothing.
     /// The fade duration is lengthened for the run and restored afterwards so the fade can be
     /// sampled across frames rather than caught in one.
     /// </summary>
@@ -50,7 +51,7 @@ namespace Skylotus.Tests.PlayMode
         private const float LoadTimeoutSeconds = 60f;
 
         /// <summary>The registered scene manager.</summary>
-        private SceneManager _scenes;
+        private SkylotusSceneManager _scenes;
 
         /// <summary>The overlay's CanvasGroup, read off the manager's serialized field.</summary>
         private CanvasGroup _overlay;
@@ -71,7 +72,7 @@ namespace Skylotus.Tests.PlayMode
             GameLogger.SetCategoryLevel("Scene", LogLevel.Off);
 
             Assert.IsTrue(ServiceLocator.TryGet(out _scenes),
-                "No SceneManager is registered. These tests rely on the core systems being up — " +
+                "No SkylotusSceneManager is registered. These tests rely on the core systems being up — " +
                 "in the Editor that is WP-5's auto-bootstrap, which runs before any play-mode test.");
 
             _overlay = GetPrivate<CanvasGroup>(_scenes, "_loadingScreen");
@@ -96,7 +97,7 @@ namespace Skylotus.Tests.PlayMode
         // ─── The wiring WP-1 made possible ──────────────────────────
 
         /// <summary>
-        /// The overlay and progress bar are assigned on the running <see cref="SceneManager"/>.
+        /// The overlay and progress bar are assigned on the running <see cref="SkylotusSceneManager"/>.
         /// Before WP-1 these were permanently null — the systems were built with
         /// <c>AddComponent</c>, so no serialized value could ever reach them, and every
         /// <c>showLoadingScreen: true</c> call was a silent no-op.
@@ -105,9 +106,9 @@ namespace Skylotus.Tests.PlayMode
         public void RegisteredSceneManager_HasItsLoadingScreenReferencesAssigned()
         {
             Assert.IsNotNull(_overlay,
-                "SceneManager._loadingScreen is null at runtime — the core systems prefab is not " +
+                "SkylotusSceneManager._loadingScreen is null at runtime — the core systems prefab is not " +
                 "in use, or its loading-screen canvas is unwired.");
-            Assert.IsNotNull(_progressBar, "SceneManager._progressBar is null at runtime.");
+            Assert.IsNotNull(_progressBar, "SkylotusSceneManager._progressBar is null at runtime.");
         }
 
         /// <summary>The overlay starts hidden and deactivated, so it never blocks the first frame.</summary>
@@ -232,7 +233,7 @@ namespace Skylotus.Tests.PlayMode
                 "The last reported progress should be 1.");
 
             // ── The scene actually changed ──────────────────────────
-            Assert.AreEqual(TargetScene, UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            Assert.AreEqual(TargetScene, SceneManager.GetActiveScene().name);
             Assert.AreEqual(TargetScene, _scenes.CurrentScene);
             Assert.AreEqual(TargetScene, loadedScene, "OnSceneLoaded should have fired with the scene name.");
             Assert.AreEqual(1, busPublishes, "OnSceneLoadedEvent should have been published once.");

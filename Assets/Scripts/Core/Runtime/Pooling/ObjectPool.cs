@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Skylotus
 {
@@ -112,15 +113,15 @@ namespace Skylotus
 
             // Subscribed in Awake (not OnEnable) so purging keeps working even if this
             // component is temporarily disabled while a scene transition happens.
-            UnityEngine.SceneManagement.SceneManager.sceneUnloaded += OnSceneUnloaded;
-            UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+            SceneManager.sceneLoaded += OnSceneLoaded;
         }
 
         /// <summary>Unity OnDestroy — unhook scene lifecycle events.</summary>
         private void OnDestroy()
         {
-            UnityEngine.SceneManagement.SceneManager.sceneUnloaded -= OnSceneUnloaded;
-            UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
         }
 
         /// <summary>Purge instances destroyed along with an unloaded scene.</summary>
@@ -591,11 +592,11 @@ namespace Skylotus
         /// </summary>
         private static void MoveToActiveScene(GameObject obj)
         {
-            var active = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var active = SceneManager.GetActiveScene();
             if (!active.IsValid() || !active.isLoaded) return;
             if (obj.scene == active) return;
 
-            UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(obj, active);
+            SceneManager.MoveGameObjectToScene(obj, active);
         }
 
         /// <summary>
