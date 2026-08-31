@@ -23,6 +23,17 @@ namespace Skylotus
     /// 12. DialogueSystem
     /// 13. NotificationSystem
     /// 14. DebugConsole (optional)
+    ///
+    /// The MonoBehaviour-based systems (5–14) live on the <b>core systems prefab</b>
+    /// assigned to <c>_coreSystemsPrefab</c>, which is instantiated once at boot. That prefab
+    /// is the only place their <c>[SerializeField]</c> values can be authored: a component added
+    /// at runtime with <c>AddComponent</c> gets compile-time defaults for every serialized field,
+    /// permanently and unreachably. Regenerate the prefab with
+    /// <c>Skylotus.Editor.SkylotusCI.GenerateCoreSystemsPrefab</c>.
+    ///
+    /// If no prefab is assigned the bootstrapper falls back to building the systems in code so an
+    /// un-migrated boot scene still runs — with every inspector value stuck at its default, which
+    /// means no loading screen, no UI containers, and no audio/notification tuning.
     /// </summary>
     public class Bootstrapper : MonoBehaviour
     {
@@ -43,8 +54,18 @@ namespace Skylotus
         [Tooltip("Scene loaded automatically after all systems initialize. Leave empty to stay in the boot scene.")]
         [SerializeField] private string _firstScene = "MainMenu";
 
+        [Header("Core Systems Prefab")]
+        [Tooltip("Prefab carrying every MonoBehaviour core system with its inspector values " +
+                 "pre-wired (loading screen, UI containers, audio and notification tuning). " +
+                 "Generate or refresh it with Skylotus.Editor.SkylotusCI.GenerateCoreSystemsPrefab. " +
+                 "If null, the systems are built in code with default values and the loading " +
+                 "screen and UI containers will be unavailable.")]
+        [SerializeField] private GameObject _coreSystemsPrefab;
+
         [Header("References (Optional)")]
-        [Tooltip("The project's Input Action Asset. If null, InputManager is not created.")]
+        [Tooltip("The project's Input Action Asset. Only used by the code-construction fallback — " +
+                 "when a core systems prefab is assigned, the prefab's InputManager carries the " +
+                 "reference instead. If both are empty, InputManager is not registered.")]
         [SerializeField] private UnityEngine.InputSystem.InputActionAsset _inputActions;
 
         [Tooltip("Color palette ScriptableObject. If assigned, registered with ServiceLocator for global access.")]
@@ -100,6 +121,11 @@ namespace Skylotus
 
         /// <summary>
         /// Create and register all core systems in dependency order.
+        ///
+        /// The pure-C# systems (SaveSystem, LocalizationSystem) are constructed here because they
+        /// have no serialized state. Everything MonoBehaviour-shaped comes from
+        /// <c>_coreSystemsPrefab</c> when one is assigned, and from
+        /// <see cref="RegisterSystemsFromCode"/> when it is not.
         /// </summary>
         private void InitializeSystems()
         {
@@ -120,6 +146,151 @@ namespace Skylotus
             localization.LoadLanguage(_defaultLanguage);
             localization.SetLanguage(_defaultLanguage);
             ServiceLocator.Register(localization);
+
+            // ─── MonoBehaviour systems (audio → console) ────────────
+            if (_coreSystemsPrefab != null)
+                RegisterSystemsFromPrefab();
+            else
+                RegisterSystemsFromCode();
+
+            // ─── Event Queue Processor ──────────────────────────────
+            gameObject.AddComponent<EventQueueProcessor>();
+
+            GameLogger.Log("Core", "=== All Skylotus Core Systems Initialized ===");
+        }
+
+        /// <summary>
+        /// Instantiate the core systems prefab and register each system it carries.
+        ///
+        /// The prefab is instantiated beneath a dormant (inactive) holder so that no component's
+        /// <c>Awake</c> runs until every boot-time decision has been applied — Unity defers
+        /// <c>Awake</c> for objects that are not active in the hierarchy. Re-parenting the
+        /// instance to the scene root activates it and fires every <c>Awake</c> in one pass.
+        ///
+        /// Registration order matches <see cref="InitializeSystems"/>'s documented sequence:
+        /// audio → pool → scene → state → time → input → palette → UI → dialogue →
+        /// notification → console.
+        /// </summary>
+        private void RegisterSystemsFromPrefab()
+        {
+            var staging = new GameObject("[Skylotus Core Staging]");
+            staging.SetActive(false);
+
+            var root = Instantiate(_coreSystemsPrefab, staging.transform);
+            root.name = "[Skylotus Core]";
+
+            // The console is opt-in. Deactivating it while the hierarchy is still dormant means
+            // its Awake never runs, so it never claims the static singleton slot.
+            var console = root.GetComponentInChildren<DebugConsole>(includeInactive: true);
+            if (console != null && !_enableDebugConsole)
+                console.gameObject.SetActive(false);
+
+            // Leaving the dormant holder activates the hierarchy and runs every Awake.
+            root.transform.SetParent(null, worldPositionStays: false);
+            Destroy(staging);
+            DontDestroyOnLoad(root);
+
+            // ─── Audio Manager ──────────────────────────────────────
+            RegisterFromPrefab<AudioManager>(root);
+
+            // ─── Object Pool ────────────────────────────────────────
+            RegisterFromPrefab<ObjectPool>(root);
+
+            // ─── Scene Manager ──────────────────────────────────────
+            RegisterFromPrefab<SceneManager>(root);
+
+            // ─── Game State ─────────────────────────────────────────
+            RegisterFromPrefab<GameStateMachine>(root);
+
+            // ─── Time Manager ───────────────────────────────────────
+            RegisterFromPrefab<TimeManager>(root);
+
+            // ─── Input Manager (only if the prefab carries an InputActionAsset) ─
+            var inputManager = root.GetComponentInChildren<InputManager>(includeInactive: true);
+            if (inputManager == null)
+            {
+                GameLogger.LogWarning("Core",
+                    "Core systems prefab has no InputManager — input will be unavailable.");
+            }
+            else if (inputManager.Actions == null)
+            {
+                GameLogger.LogError("Core",
+                    "The core systems prefab's InputManager has no InputActionAsset assigned. " +
+                    "Assign one on the prefab (not on the Bootstrapper) and re-enter play mode.");
+            }
+            else
+            {
+                // Initialize explicitly — InputManager deliberately does no work in Awake so the
+                // bootstrapper controls when the asset is cloned and rebinds are loaded.
+                inputManager.Initialize();
+                ServiceLocator.Register(inputManager);
+            }
+
+            // ─── Color Palette ──────────────────────────────────────
+            if (_colorPalette != null)
+                ServiceLocator.Register(_colorPalette);
+
+            // ─── UI Manager ────────────────────────────────────────
+            RegisterFromPrefab<UIManager>(root);
+
+            // ─── Dialogue System ────────────────────────────────────
+            RegisterFromPrefab<DialogueSystem>(root);
+
+            // ─── Notification System ────────────────────────────────
+            RegisterFromPrefab<NotificationSystem>(root);
+
+            // ─── Debug Console (last, so it can reference other systems) ─
+            if (_enableDebugConsole)
+            {
+                if (console == null)
+                {
+                    GameLogger.LogWarning("Core",
+                        "Debug console is enabled but the core systems prefab has no DebugConsole.");
+                }
+
+                RegisterDebugCommands();
+            }
+        }
+
+        /// <summary>
+        /// Find a system component on the instantiated core systems prefab and register it.
+        /// Logs an error rather than throwing when the prefab is missing the component, so a
+        /// stale prefab degrades one system instead of aborting the whole boot.
+        /// </summary>
+        /// <typeparam name="T">The system component type to locate and register.</typeparam>
+        /// <param name="root">Root of the instantiated core systems prefab.</param>
+        /// <returns>The registered component, or null if the prefab does not carry one.</returns>
+        private T RegisterFromPrefab<T>(GameObject root) where T : MonoBehaviour
+        {
+            var system = root.GetComponentInChildren<T>(includeInactive: true);
+
+            if (system == null)
+            {
+                GameLogger.LogError("Core",
+                    $"Core systems prefab has no {typeof(T).Name} component. " +
+                    "Regenerate it with SkylotusCI.GenerateCoreSystemsPrefab.");
+                return null;
+            }
+
+            ServiceLocator.Register(system);
+            return system;
+        }
+
+        /// <summary>
+        /// Legacy fallback used when no core systems prefab is assigned: build every system as a
+        /// child GameObject with <c>AddComponent</c>.
+        ///
+        /// Every <c>[SerializeField]</c> on these components keeps its compile-time default and
+        /// cannot be authored — no loading screen, no UI containers, no audio or notification
+        /// tuning. This path exists only so an un-migrated boot scene still boots; assign
+        /// <c>_coreSystemsPrefab</c> to get configurable systems.
+        /// </summary>
+        private void RegisterSystemsFromCode()
+        {
+            GameLogger.LogWarning("Core",
+                "No core systems prefab assigned — falling back to code-constructed systems. " +
+                "Inspector values (loading screen, UI containers, tuning) are unavailable. " +
+                "Run SkylotusCI.GenerateCoreSystemsPrefab and assign the result.");
 
             // ─── Audio Manager ──────────────────────────────────────
             var audioGo = CreateChild("AudioManager");
@@ -152,7 +323,9 @@ namespace Skylotus
                 var inputGo = CreateChild("InputManager");
                 var inputManager = inputGo.AddComponent<InputManager>();
 
-                // Inject the asset via reflection since the field is serialized/private
+                // Reflection is unavoidable on this path: the component is created at runtime, so
+                // there is no serialized data to carry the reference and InputManager exposes no
+                // setter. The prefab path assigns the asset in the inspector instead.
                 var field = typeof(InputManager).GetField("_inputActions",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 field?.SetValue(inputManager, _inputActions);
@@ -189,11 +362,6 @@ namespace Skylotus
                 consoleGo.AddComponent<DebugConsole>();
                 RegisterDebugCommands();
             }
-
-            // ─── Event Queue Processor ──────────────────────────────
-            gameObject.AddComponent<EventQueueProcessor>();
-
-            GameLogger.Log("Core", "=== All Skylotus Core Systems Initialized ===");
         }
 
         /// <summary>Create a child GameObject under the bootstrapper root.</summary>

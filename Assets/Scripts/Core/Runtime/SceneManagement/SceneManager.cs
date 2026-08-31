@@ -10,8 +10,11 @@ namespace Skylotus
     /// Async scene management with loading screens, transition callbacks,
     /// navigation history (back button support), and additive scene layering.
     ///
-    /// Assign a loading screen CanvasGroup and progress bar in the inspector,
-    /// or use without them for instant cuts.
+    /// The loading screen CanvasGroup and progress bar are assigned in the inspector — in
+    /// practice on the core systems prefab that <c>Bootstrapper</c> instantiates, which is the
+    /// only place a serialized value on this component can be authored. Leave them empty for
+    /// instant cuts; <see cref="LoadScene"/> then logs a warning instead of silently skipping
+    /// the overlay.
     /// </summary>
     public class SceneManager : MonoBehaviour
     {
@@ -140,6 +143,15 @@ namespace Skylotus
             {
                 _loadingScreen.gameObject.SetActive(true);
                 yield return FadeCanvasGroup(_loadingScreen, 0f, 1f, _fadeDuration);
+            }
+            else if (showLoading)
+            {
+                // Silently skipping the overlay is how this went unnoticed for so long: a
+                // code-constructed SceneManager has no serialized data, so _loadingScreen is
+                // always null and every showLoadingScreen:true call was a no-op.
+                GameLogger.LogWarning("Scene",
+                    $"'{sceneName}' requested a loading screen but none is assigned. " +
+                    "Assign one on the core systems prefab (Bootstrapper._coreSystemsPrefab).");
             }
 
             float startTime = Time.unscaledTime;

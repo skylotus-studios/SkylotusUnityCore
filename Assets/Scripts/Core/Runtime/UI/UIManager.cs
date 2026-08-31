@@ -53,6 +53,12 @@ namespace Skylotus
     /// ui.ShowScreen("Settings");  // pushes MainMenu to stack
     /// ui.GoBack();                // pops back to MainMenu
     /// </code>
+    ///
+    /// <see cref="ScreenContainer"/> and <see cref="ModalContainer"/> are optional parent
+    /// transforms supplied by the core systems prefab. They are persistent overlay canvases, so
+    /// use them for UI that must outlive a scene load — a global pause modal, a toast layer —
+    /// by parenting instances to them yourself. Registration never re-parents a screen:
+    /// screens authored inside a scene stay in that scene and are destroyed with it.
     /// </summary>
     public class UIManager : MonoBehaviour
     {
@@ -89,6 +95,19 @@ namespace Skylotus
 
         /// <summary>Number of screens on the back stack.</summary>
         public int StackDepth => _screenStack.Count;
+
+        /// <summary>
+        /// Optional persistent parent for screens instantiated at runtime, wired on the core
+        /// systems prefab. Null when the bootstrapper fell back to code-constructed systems.
+        /// </summary>
+        public Transform ScreenContainer => _screenContainer;
+
+        /// <summary>
+        /// Optional persistent parent for modals instantiated at runtime, wired on the core
+        /// systems prefab and rendered above <see cref="ScreenContainer"/>. Null when the
+        /// bootstrapper fell back to code-constructed systems.
+        /// </summary>
+        public Transform ModalContainer => _modalContainer;
 
         /// <summary>
         /// Register a screen by name. The screen's GameObject is deactivated immediately.

@@ -174,6 +174,7 @@ MonoBehaviour:
   _defaultLanguage: en
   _saveEncryptionKey: 
   _firstScene: MainMenu
+  _coreSystemsPrefab: {fileID: 5320027748712417836, guid: f0502fd7d14a3e44d863e61960b65065, type: 3}
   _inputActions: {fileID: -944628639613478452, guid: 2bcd2660ca9b64942af0de543d8d7100, type: 3}
   _colorPalette: {fileID: 11400000, guid: a64432c4c083d1e4da79c91dd545094a, type: 2}
 --- !u!114 &209414841
