@@ -159,8 +159,18 @@ Both were found by the implementing agents and confirmed:
 
 ### Open decisions for a human
 
-- **LICENSE.** WP-13 correctly refused to choose one; `LICENSE` is a flagged placeholder. Must be
-  resolved before this template is cloned commercially or shared.
+- ~~**LICENSE**~~ **RESOLVED (2026-08-31).** Decision: **source-available, all rights reserved** —
+  public so the code can be read and learned from, with use, copying, modification and
+  redistribution withheld. `LICENSE` now states this, notes that a GitHub fork is not a grant of
+  those rights, and carries a third-party section. This matches what the default already was; the
+  file makes it deliberate rather than an apparent oversight.
+- **A purchased asset pack is sitting in that public repo.** `Assets/Animated Loading Icons/`
+  (spritesheet, prefabs, animations, vendor documentation PDF) carries **no licence file**. Unity
+  Asset Store's standard EULA generally forbids redistributing pack contents in a form third parties
+  can extract — a public repo does exactly that. This is independent of whichever licence is chosen
+  for Skylotus's own code, and should be checked against wherever the pack came from. The other
+  vendored items are clearer: `UnityEditorDarkMode.dll` is MIT (its README carries the text) and
+  TextMeshPro ships with Unity.
 - **IL2CPP is set but not buildable on this machine.** WP-11 set the Standalone backend to IL2CPP,
   but the editor install has only `*_mono` variations — the *Windows Build Support (IL2CPP)* module
   is not installed. WP-11's "a clean clone can produce a Windows standalone build" criterion cannot
@@ -220,14 +230,12 @@ whether `[RuntimeInitializeOnLoadMethod]` fires from an Editor-only assembly —
 technique for any future runtime claim. Its limit: batchmode play mode always runs an empty untitled
 scene, so scene-specific behaviour still needs WP-12 or a human.
 
-### Still needs a human at the keyboard
+### Human verification — DONE (2026-08-31)
 
-WP-5's auto-bootstrap cannot be fully proven headlessly. Open the Editor and check:
-1. `Gameplay.unity` → Play: systems initialize, **you stay in Gameplay** (if it jumps to MainMenu the
-   `_firstScene` injection failed), zero exceptions.
-2. `MainMenu.unity` → Play: menu and settings screens function, zero exceptions.
-3. `BootScene.unity` → Play: the `[EditorBootstrap]` line must **not** appear and bootstrapping must
-   happen exactly once — this is the no-duplicate check.
+WP-5's auto-bootstrap and WP-3's brightness were confirmed working by a human in the Editor:
+`Gameplay.unity`, `MainMenu.unity` and `BootScene.unity` all behave correctly on Play (systems up,
+no jump to MainMenu, no duplicate boot), and the brightness slider visibly dims the screen. These
+were the last two criteria no headless run could reach; both now pass.
 
 ### Building a player mutates tracked assets — one of them matters
 

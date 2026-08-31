@@ -145,13 +145,19 @@ managed stripping level `Low`, IL2CPP compiler configuration `Release`, and the 
 layer stack — all through `PlayerSettings` and a `SerializedObject` over `TagManager.asset`,
 never by editing YAML. It is idempotent: a second run reports no changes.
 
-### 3. Resolve the licence
+### 3. Understand the licence
 
-`LICENSE` **is a placeholder, not a licence.** Its first line reads
-`LICENSE DECISION REQUIRED — DO NOT SHIP THIS FILE AS-IS`. A human with authority over
-Skylotus Studios' IP has to decide whether this repository is internal-only or public, and
-whether the studio's own code and the vendored third-party assets need different terms. Do not
-ship, publish or fork commercially until that file has been replaced.
+**This repository is source-available, not open source.** `LICENSE` grants permission to read,
+study and learn from the code, and withholds permission to use, copy, modify or redistribute
+it. Ideas are not owned — reading how something here works and then writing your own
+implementation is exactly what the repository is public for. Copying the files is not.
+
+If you are cloning this as your own project's base under the workflow above, you are doing so
+with Skylotus Studios' permission as the copyright holder; replace `LICENSE` with whatever
+terms your own project ships under.
+
+One item is still unresolved: `Assets/Animated Loading Icons/` is a third-party pack with no
+licence file and unconfirmed provenance. See [Known open items](#known-open-items).
 
 ### 4. Set the application icon
 
@@ -1118,10 +1124,15 @@ debugging time:
 
 Things a fresh clone will actually hit. None of these is hidden anywhere else.
 
-### LICENSE is unresolved
+### A vendored asset pack has unconfirmed licensing
 
-`LICENSE` is a placeholder that says so on its first line. Nothing about this repository's
-distribution terms has been decided. See [step 3 of the checklist](#3-resolve-the-licence).
+`Assets/Animated Loading Icons/` ships with vendor documentation but **no licence file**, and its
+origin has not been confirmed. If it came from the Unity Asset Store, keeping it in a public
+repository is likely to breach the Asset Store EULA, which generally prohibits distributing pack
+contents in a form third parties can extract.
+
+This is independent of `LICENSE`, which covers Skylotus Studios' own code only. Until the pack's
+provenance is confirmed, either remove it from the repository or make the repository private.
 
 ### IL2CPP is configured but may not be buildable
 

@@ -1,47 +1,75 @@
-LICENSE DECISION REQUIRED — DO NOT SHIP THIS FILE AS-IS
-=========================================================
+Copyright (c) 2026 Skylotus Studios. All rights reserved.
 
-This file is a placeholder. No license has been chosen for this repository.
 
-Why this is a placeholder and not a license
+SOURCE-AVAILABLE — NOT OPEN SOURCE
+===================================
+
+This repository is public so that the code can be read, studied and discussed. It is
+not open source, and no licence to use it is granted.
+
+You MAY:
+
+  - read, browse and study this source code;
+  - learn from the techniques, architecture and approaches it demonstrates, and apply
+    that understanding in your own independently written work;
+  - quote short excerpts for the purpose of discussion, review, teaching or criticism.
+
+You MAY NOT, without prior written permission from Skylotus Studios:
+
+  - copy, reproduce or redistribute this code or these assets, in source or binary form;
+  - incorporate any part of them into your own project, whether commercial or not;
+  - modify, adapt or create derivative works from them;
+  - sublicense, sell or otherwise transfer them.
+
+Ideas are not owned. Copyright protects the particular expression of a program, not the
+concepts behind it. Understanding how something here works and then writing your own
+implementation is exactly what this repository is public for. Copying the files is not.
+
+
+A NOTE ON FORKING
+-----------------
+
+Because this repository is public on GitHub, GitHub's Terms of Service permit other
+GitHub users to view and fork it on the GitHub platform. That is a condition of hosting
+a public repository and cannot be disabled while it remains public. A fork is not a
+grant of the rights withheld above: it does not permit use, modification or
+redistribution of this code outside GitHub, nor its inclusion in any other project.
+
+
+THIRD-PARTY CONTENT
+-------------------
+
+This repository vendors third-party material that this notice does NOT cover. Each item
+remains under its own terms, which take precedence over everything above:
+
+  - Assets/Plugins/UnityEditorDarkMode/ — MIT, Copyright (c) 2024 Jiaqi (0x7c13) Liu.
+    Full licence text in that folder's README.txt.
+
+  - Assets/TextMesh Pro/ — Unity Technologies, distributed with the Unity Editor and
+    governed by the Unity Companion Licence / Unity Terms of Service.
+
+  - Assets/Animated Loading Icons/ — third-party asset pack. LICENCE STATUS UNRESOLVED.
+    See the warning below.
+
+  - Packages/ — resolved by the Unity Package Manager, not vendored here. LitMotion,
+    Universal RP, Input System, Test Framework and the rest each carry their own terms.
+
+
+UNRESOLVED — Assets/Animated Loading Icons/
 --------------------------------------------
 
-Skylotus Unity Core is described (see README.md) as the base template Skylotus Studios
-clones into every new commercial project. Choosing a license for that — MIT, proprietary,
-"all rights reserved", a dual-license split between the studio's own code and the
-third-party assets and packages vendored into this repository — is a legal and business
-decision about how the studio's commercial IP is allowed to be used, by whom, and under
-what terms. That decision belongs to whoever owns the studio's IP strategy, not to an
-automated agent filling in a missing file. Guessing wrong here (e.g. silently applying
-MIT, which would let anyone reuse Skylotus Studios' core systems freely, including
-competitors) is a mistake that is expensive to unwind once the repository has been forked
-into real projects and possibly published.
+This pack ships with vendor documentation but no licence file, and its origin has not
+been confirmed. If it came from the Unity Asset Store, redistributing it in a public
+repository is likely to breach the Asset Store EULA, which generally prohibits
+distributing pack contents in a form third parties can extract — which is precisely what
+a public repository does.
 
-What needs to happen before this file is real
-------------------------------------------------
+This is a separate problem from the licensing of Skylotus Studios' own code, and choosing
+this notice does not resolve it. Until its provenance is confirmed, either remove the pack
+from the repository or make the repository private. See CORE_FIXES.md.
 
-A human with authority over Skylotus Studios' IP needs to decide, at minimum:
 
-1. Is this repository ever intended to be public, or is it strictly an internal template
-   cloned into private project repositories (per the README's "delete the .git folder"
-   workflow)? That materially changes what "license" even means here — an internal
-   template arguably doesn't need an OSS license at all, just an internal usage policy.
-2. If it stays internal-only: replace this file with a short proprietary /
-   "All Rights Reserved, Skylotus Studios" notice, or remove the file and state the policy
-   in the studio's internal documentation instead.
-3. If any part of it is ever open-sourced or shared externally: pick an actual license
-   (MIT, Apache-2.0, a custom EULA, etc.) with legal input, and confirm every vendored
-   third-party asset and package under Assets/ and Packages/ is compatible with that
-   choice — this repo bundles third-party packages (LitMotion, TextMeshPro assets, the
-   "Animated Loading Icons" asset pack, the UnityEditorDarkMode plugin — see CORE_FIXES.md
-   WP-19) each with their own license terms that a top-level LICENSE file does not
-   override.
-4. Either way, record the decision in README.md so it isn't lost the next time this
-   template is forked.
+PERMISSIONS
+-----------
 
-Until that decision is made, treat this repository as "all rights reserved, no license
-granted" by default — that is the legal default in the absence of an explicit license, so
-this placeholder does not change anyone's rights either way. It exists only as a visible
-marker that the decision has not been made yet, rather than silently having no LICENSE
-file at all (which reads as an oversight rather than a deliberate choice, and gives no
-pointer to what needs to happen next).
+To request rights beyond those granted above, contact Skylotus Studios.
