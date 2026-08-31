@@ -13,6 +13,13 @@ namespace Skylotus
     /// <see cref="SettingsService"/>. This tab touches <c>PlayerPrefs</c> nowhere, and the values
     /// it shows are the same ones the service already applied at boot.
     ///
+    /// <b>Brightness.</b> The slider's only job is to call <c>SettingsService.SetBrightness</c>.
+    /// The service persists it and hands it to whatever is registered as its
+    /// <c>BrightnessController</c> — <c>Skylotus.Core.Rendering.BrightnessController</c>, which
+    /// drives a <c>ColorAdjustments.postExposure</c> override on the URP volume stack and installs
+    /// itself at boot. This tab holds no reference to it and must not acquire one: the slider is
+    /// the view, the service is the owner, and the controller is the implementation.
+    ///
     /// <b>Expected hierarchy:</b>
     /// <code>
     ///   ScrollView → Viewport → Content (VerticalLayoutGroup)

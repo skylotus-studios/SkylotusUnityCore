@@ -229,12 +229,71 @@ WP-5's auto-bootstrap cannot be fully proven headlessly. Open the Editor and che
 3. `BootScene.unity` → Play: the `[EditorBootstrap]` line must **not** appear and bootstrapping must
    happen exactly once — this is the no-duplicate check.
 
-### Build byproducts in `ProjectSettings/`
+### Building a player mutates tracked assets — one of them matters
 
-Running a Standalone build (WP-6's strip check, and equally WP-13's `BuildWindows64`) materializes
-`m_BuildTargetBatching: []` into an explicit `Standalone / m_StaticBatching: 1 / m_DynamicBatching: 0`
-entry. It is Unity writing its own default and will recur on any build. Keep it or revert it, but
-expect it back.
+Running a Standalone build (WP-6's strip check, and equally WP-13's `BuildWindows64`) writes to four
+tracked files. Three are noise; one is not.
+
+**Reverted, and worth watching for:** `ProjectSettings/UnityConnectSettings.asset` flipped
+`m_Enabled: 0 → 1` — the top-level **Unity Connect / Analytics service enable**. No package asked for
+it; a player build turned it on by itself. It was reverted before the wave-2 commit and analytics is
+off again. Anyone adding a build step to CI must check this file afterwards, or the template ships
+with telemetry silently enabled.
+
+**Also reverted, as build caches that regenerate:** `Assets/Settings/UniversalRP.asset` (shader
+prefiltering/stripping hints) and `Assets/Settings/URP/UniversalRenderPipelineGlobalSettings.asset`
+(materialized default graphics settings).
+
+**Kept, harmless:** `ProjectSettings/ProjectSettings.asset` materializes `m_BuildTargetBatching: []`
+into an explicit `Standalone / m_StaticBatching: 1 / m_DynamicBatching: 0`. Unity writing its own
+default; it will recur.
+
+## Wave 3 outcome (2026-08-31)
+
+WP-3 and WP-12 landed. **Full gate green, verified independently: `-Mode all` → compile 0,
+EditMode 108/108, PlayMode 45/45.**
+
+### A latent runtime bug, found by writing tests — no WP owns it
+
+`CustomCursor.UpdateMouseCursor` (`CustomCursor.cs:146`) falls back to legacy
+`UnityEngine.Input.mousePosition` when `Mouse.current == null`. This project runs
+`activeInputHandler: 1` — **Input System only** — where touching legacy `Input` throws. So on any
+mouseless device the cursor code throws *every frame*.
+
+It surfaced because it broke **19 of 45** PlayMode tests the moment one loaded `Gameplay.unity`
+(which carries `CursorCanvas`). WP-12 routed around it by loading `BootScene` instead, and did not
+fix it — correctly, since the file was outside its boundary. **This needs its own work package.** It
+is not a test-only problem.
+
+### `GC.GetAllocatedBytesForCurrentThread()` is useless in Unity
+
+WP-12's first zero-allocation test used it and **passed even with a deliberate `new object()` inside
+the measured window** — the API returns 0 unconditionally on this runtime. That is the exact
+"green suite that asserts nothing" failure the negative-control practice exists to catch, and it
+caught itself. Use the test framework's `Is.Not.AllocatingGCMemory()` (GC.Alloc profiler recorder)
+instead. Note this does **not** invalidate WP-8's earlier measurement, which ran on CoreCLR in a
+standalone harness where the API works — but a Unity-side test must not use it.
+
+### Brightness needed more than a volume override
+
+WP-3 found that **all three scenes ship with `m_RenderPostProcessing: 0`** — every camera in the
+project. Without URP's post-processing pass, any volume-stack brightness is invisible, so this
+document's WP-3 spec was incomplete. `DefaultVolumeProfile.asset` already carried an active
+`ColorAdjustments` with `postExposure` overridden, so no asset change was needed at all. The
+controller now forces `renderPostProcessing` on at runtime while brightness ≠ default and restores
+the cameras it changed. **Ticking the box in the three scenes is the cleaner fix** and would let that
+workaround be deleted.
+
+WP-3 also created a **new assembly**, `Skylotus.Core.Rendering`, because `Skylotus.Core.Runtime.asmdef`
+has zero URP references and belongs to WP-10. If one assembly is preferred, the alternative is two
+added references on that asmdef plus moving the file up a folder.
+
+### Six negative controls were run
+
+WP-4, WP-15 and WP-12 all broke a passing assertion, confirmed the failure, and reverted. WP-12 did
+this for six tests including WP-7's scene-load survival and WP-1's loading screen — the two criteria
+whose original authors could only reason about them. That practice is what turned this suite from
+"green" into "green and meaningful", and it is worth making mandatory.
 
 ### Integration gap closed after the fact
 
