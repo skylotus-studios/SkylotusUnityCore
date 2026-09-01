@@ -56,7 +56,9 @@ namespace Skylotus.Editor
         private const string TagManagerAssetPath = "ProjectSettings/TagManager.asset";
 
         /// <summary>
-        /// Placeholder company name. <b>Change this per project</b> via
+        /// The studio. Every project built from this template ships under it, so this is a real
+        /// default rather than a placeholder and is never reported as needing a value. A project
+        /// published by somebody else overrides it like any other field, via
         /// <see cref="ProjectCompanyVariable"/> or the JSON config.
         /// </summary>
         private const string ProjectDefaultCompanyName = "Skylotus Studios";
@@ -73,6 +75,19 @@ namespace Skylotus.Editor
         /// product that does not exist yet.
         /// </summary>
         private const string ProjectDefaultBundleVersion = "0.1.0";
+
+        /// <summary>
+        /// Where the application icon lives by convention, so a project that follows it needs no
+        /// <c>iconPath</c> entry at all. An explicit <c>iconPath</c> still wins.
+        /// </summary>
+        private const string ProjectConventionIconPath = "Assets/Resources/Icon/icon.png";
+
+        /// <summary>
+        /// The same convention slot in <c>.ico</c> form. Unity's texture importer does not read
+        /// <c>.ico</c>, so this is only ever checked in order to explain why an icon that is
+        /// plainly sitting in the right folder did not get used.
+        /// </summary>
+        private const string ProjectConventionIconIcoPath = "Assets/Resources/Icon/icon.ico";
 
         /// <summary>Lowest layer index a project may name; 0-7 are engine-reserved.</summary>
         private const int ProjectFirstUserLayer = 8;
@@ -144,9 +159,10 @@ namespace Skylotus.Editor
                 var config = LoadProjectConfig(out var configSource);
                 Debug.Log($"[{Category}] Project config source: {configSource}");
 
+                // No placeholder accumulator: the studio name is already correct.
                 var company = ResolveProjectValue(
                     ProjectCompanyVariable, config?.companyName, ProjectDefaultCompanyName,
-                    "companyName", placeholders);
+                    "companyName", null);
 
                 var product = ResolveProjectValue(
                     ProjectProductVariable, config?.productName, ProjectDefaultProductName,
@@ -160,9 +176,12 @@ namespace Skylotus.Editor
                 // is always well-formed and never claims a studio domain the template does not own.
                 var derivedIdentifier = DeriveProjectIdentifier(company, product);
 
+                // No placeholder accumulator either: a derived identifier is well-formed, and
+                // it is wrong only when the names it was built from are wrong — which the report
+                // already says. Flagging both makes one real problem read as two.
                 var identifier = ResolveProjectValue(
                     ProjectBundleIdVariable, config?.applicationIdentifier, derivedIdentifier,
-                    "applicationIdentifier", placeholders);
+                    "applicationIdentifier", null);
 
                 if (!IsValidProjectIdentifier(identifier))
                 {
@@ -222,14 +241,17 @@ namespace Skylotus.Editor
         /// Field names are the JSON keys, so they are plain camelCase rather than the
         /// <c>_camelCase</c> this codebase uses for private state.
         ///
+        /// A starter file ships at the project root. An empty string means "fall back", so the
+        /// fields it leaves blank are exactly the ones a new project has to fill in.
+        ///
         /// <code>
         /// {
-        ///   "companyName": "Your Studio",
+        ///   "companyName": "Skylotus Studios",
         ///   "productName": "Your Game",
         ///   "applicationIdentifier": "com.yourstudio.yourgame",
         ///   "bundleVersion": "0.1.0",
         ///   "scriptingBackend": "IL2CPP",
-        ///   "iconPath": "Assets/Art/Icons/AppIcon.png",
+        ///   "iconPath": "",
         ///   "sortingLayers": ["Background", "Ground", "Entities", "Foreground", "UI", "Overlay"],
         ///   "tags": ["Player", "Enemy"],
         ///   "layers": [{ "index": 8, "name": "Interactable" }]
@@ -254,7 +276,10 @@ namespace Skylotus.Editor
             /// <summary>Standalone scripting backend name: <c>IL2CPP</c> or <c>Mono2x</c>.</summary>
             public string scriptingBackend;
 
-            /// <summary>Asset path of a square Texture2D to use as the application icon.</summary>
+            /// <summary>
+            /// Asset path of a square Texture2D to use as the application icon. Blank falls back
+            /// to the convention slot <c>Assets/Resources/Icon/icon.png</c>.
+            /// </summary>
             public string iconPath;
 
             /// <summary>Sorting layers, back to front. Null or empty keeps the starter set.</summary>
@@ -321,7 +346,11 @@ namespace Skylotus.Editor
         /// <param name="configValue">Value from the JSON config, possibly null.</param>
         /// <param name="fallback">Template default used when nothing else supplies a value.</param>
         /// <param name="label">Field name used in log output.</param>
-        /// <param name="placeholders">Accumulator for fields that fell through to the default.</param>
+        /// <param name="placeholders">
+        /// Accumulator for fields that fell through to the default. Pass <c>null</c> when the
+        /// default is a real value rather than a placeholder — the fall-through is then normal
+        /// and reporting it as unfinished would train the operator to ignore the warning.
+        /// </param>
         /// <returns>The resolved value; never null or blank.</returns>
         private static string ResolveProjectValue(string variableName, string configValue,
             string fallback, string label, List<string> placeholders)
@@ -340,8 +369,12 @@ namespace Skylotus.Editor
                 return configValue.Trim();
             }
 
-            placeholders.Add(label);
-            Debug.Log($"[{Category}] {label}: '{fallback}' (template default)");
+            placeholders?.Add(label);
+
+            Debug.Log(placeholders == null
+                ? $"[{Category}] {label}: '{fallback}' (default)"
+                : $"[{Category}] {label}: '{fallback}' (template default)");
+
             return fallback;
         }
 
@@ -542,18 +575,52 @@ namespace Skylotus.Editor
         }
 
         /// <summary>
-        /// Assign the application icon when the config names one. No icon is generated: a
-        /// placeholder shipped by a template is worse than none, because it looks intentional
-        /// and survives to release.
+        /// Decide which texture to use as the application icon. An explicit <c>iconPath</c> wins;
+        /// otherwise the convention slot <see cref="ProjectConventionIconPath"/> is used when a
+        /// texture is actually there, so the common case needs no configuration.
+        /// </summary>
+        /// <param name="config">Parsed JSON config, possibly null.</param>
+        /// <returns>A project-relative asset path, or null when there is no icon to assign.</returns>
+        private static string ResolveProjectIconPath(ProjectIdentityConfig config)
+        {
+            var configured = config?.iconPath;
+
+            if (!string.IsNullOrWhiteSpace(configured))
+                return configured.Trim();
+
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(ProjectConventionIconPath) != null)
+            {
+                Debug.Log($"[{Category}] iconPath: '{ProjectConventionIconPath}' (convention)");
+                return ProjectConventionIconPath;
+            }
+
+            // Unity's texture importer has no .ico reader, so an icon.ico in the convention
+            // folder never becomes a Texture2D. Without this it looks silently ignored.
+            if (File.Exists(ProjectConventionIconIcoPath))
+            {
+                Debug.LogWarning(
+                    $"[{Category}] {ProjectConventionIconIcoPath} exists, but Unity does not " +
+                    "import .ico as a texture and PlayerSettings needs a Texture2D. Export the " +
+                    $"same artwork to {ProjectConventionIconPath}; Unity builds the Windows " +
+                    "executable's icon from that texture at build time.");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Assign the application icon named by <see cref="ResolveProjectIconPath"/>. No icon is
+        /// generated when there is none: a placeholder shipped by a template is worse than none,
+        /// because it looks intentional and survives to release.
         /// </summary>
         /// <param name="config">Parsed JSON config, possibly null.</param>
         /// <param name="changes">Accumulator for the change log.</param>
         /// <returns>True on success; false after <see cref="Fail"/> has already been called.</returns>
         private static bool ApplyProjectIcons(ProjectIdentityConfig config, List<string> changes)
         {
-            var iconPath = config?.iconPath;
+            var trimmedPath = ResolveProjectIconPath(config);
 
-            if (string.IsNullOrWhiteSpace(iconPath))
+            if (trimmedPath == null)
             {
                 var existing = PlayerSettings.GetIcons(NamedBuildTarget.Standalone, IconKind.Any);
 
@@ -561,14 +628,14 @@ namespace Skylotus.Editor
                 {
                     Debug.LogWarning(
                         $"[{Category}] No application icon set — builds will use Unity's default " +
-                        $"logo. Add a square texture under Assets/, point \"iconPath\" in " +
-                        $"{ProjectConfigFileName} at it, and re-run this method.");
+                        $"logo. Put a square PNG at {ProjectConventionIconPath} and re-run this " +
+                        $"method; no config entry is needed. To keep it somewhere else, point " +
+                        $"\"iconPath\" in {ProjectConfigFileName} at it instead.");
                 }
 
                 return true;
             }
 
-            var trimmedPath = iconPath.Trim();
             var icon = AssetDatabase.LoadAssetAtPath<Texture2D>(trimmedPath);
 
             if (icon == null)
@@ -946,17 +1013,14 @@ namespace Skylotus.Editor
             builder.AppendLine($"[{Category}]   companyName           = {company}");
             builder.AppendLine($"[{Category}]   productName           = {product}");
             builder.AppendLine($"[{Category}]   applicationIdentifier = {identifier}");
-            builder.AppendLine($"[{Category}] Fix by writing {ProjectConfigFileName} beside " +
-                               "Assets/ and re-running this method:");
-            builder.AppendLine($"[{Category}]   {{ \"companyName\": \"Your Studio\", " +
-                               "\"productName\": \"Your Game\", " +
-                               "\"applicationIdentifier\": \"com.yourstudio.yourgame\", " +
-                               "\"bundleVersion\": \"0.1.0\" }");
-            builder.AppendLine($"[{Category}] Or export ${ProjectCompanyVariable}, " +
-                               $"${ProjectProductVariable}, ${ProjectBundleIdVariable} and " +
-                               $"${ProjectBundleVersionVariable}, then re-run.");
-            builder.Append($"[{Category}] The application icon is a separate manual step — see " +
-                           "the iconPath field.");
+            builder.AppendLine($"[{Category}] Fix by filling in {ProjectConfigFileName} beside " +
+                               "Assets/ and re-running this method — the fields to fill are the " +
+                               "ones it leaves as empty strings.");
+            builder.AppendLine($"[{Category}] Or export ${ProjectProductVariable}, " +
+                               $"${ProjectBundleIdVariable} and ${ProjectBundleVersionVariable}, " +
+                               "then re-run.");
+            builder.Append($"[{Category}] The application icon is a separate manual step — put a " +
+                           $"square PNG at {ProjectConventionIconPath}.");
 
             Debug.LogWarning(builder.ToString());
         }

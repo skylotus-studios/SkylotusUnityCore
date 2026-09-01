@@ -124,43 +124,60 @@ the licence, you may prefer to track it — delete the `Animated Loading Icons` 
 
 ## Post-clone checklist
 
-Everything below has to be decided per project. `SkylotusCI.ConfigureProject` handles most of
-it in one command and **names in its log every value still sitting on a template default**, so
-run it first and read what it says.
+The seven items below are what this template deliberately leaves blank, because only you can
+decide them. Steps 1 and 2 are the automated pair — you supply your values, `ConfigureProject`
+stamps them into `PlayerSettings`. Steps 3 through 7 are manual, and nothing checks them for
+you.
+
+Run `ConfigureProject` first anyway, even before you have decided anything: it **names every
+value still sitting on a template default**, which makes its log the fastest inventory of what
+this project has not been told yet.
 
 ### 1. Tell the project who it is
 
-Values resolve in this order, first hit wins:
-
-1. **Environment variables** —
-   `SKYLOTUS_COMPANY_NAME`, `SKYLOTUS_PRODUCT_NAME`, `SKYLOTUS_BUNDLE_ID`,
-   `SKYLOTUS_BUNDLE_VERSION`, `SKYLOTUS_SCRIPTING_BACKEND`.
-2. **A JSON file** at `<project root>/SkylotusProject.json` — beside `Assets/`. Override the
-   path with `SKYLOTUS_PROJECT_CONFIG`.
-3. **A template default**, which the run reports as `NEEDS A REAL VALUE`.
+**`SkylotusProject.json` is committed at the project root** — edit it, do not create it. An
+empty string means *fall back*, so the fields it ships blank are exactly the ones you have to
+fill in:
 
 ```json
 {
-  "companyName": "Your Studio",
-  "productName": "Your Game",
-  "applicationIdentifier": "com.yourstudio.yourgame",
+  "companyName": "Skylotus Studios",
+  "productName": "",
+  "applicationIdentifier": "",
   "bundleVersion": "0.1.0",
   "scriptingBackend": "IL2CPP",
-  "iconPath": "Assets/Art/Icon.png",
+  "iconPath": "",
   "sortingLayers": ["Background", "Ground", "Entities", "Foreground", "UI", "Overlay"],
-  "tags": ["Player", "Enemy"],
-  "layers": [{ "index": 8, "name": "Interactable" }]
+  "tags": [],
+  "layers": []
 }
 ```
 
-Every field is optional. `SkylotusProject.json` **is not in this repository and is not
-gitignored** — decide whether your project commits it (reproducible for the whole team) or
-keeps it local (per-developer). That decision is still open here.
+In practice that is **one** field: `productName`. The rest take care of themselves —
 
-The template defaults you must replace are `companyName = "Skylotus Studios"`,
-`productName = "CoreProject"` and `bundleVersion = "0.1.0"`. The application identifier is
-*derived* from the company and product names when you do not supply one, so it is well-formed
-but still wrong until those two are real.
+| Field | If you leave it blank |
+|-------|----------------------|
+| `companyName` | Stays `Skylotus Studios`, which is correct and is **not** reported as unset |
+| `applicationIdentifier` | Derived as reverse-DNS from the company and product names, and not reported either — it is wrong only while those names are |
+| `iconPath` | Uses `Assets/Resources/Icon/icon.png` if a texture is there |
+| `sortingLayers` | Keeps the starter stack shown above |
+| `tags`, `layers` | Adds none; they are a game decision |
+
+`bundleVersion` joins `productName` in the warning if you clear the `0.1.0` it ships with.
+
+Values resolve in this order, first hit wins:
+
+1. **Environment variables** — `SKYLOTUS_COMPANY_NAME`, `SKYLOTUS_PRODUCT_NAME`,
+   `SKYLOTUS_BUNDLE_ID`, `SKYLOTUS_BUNDLE_VERSION`, `SKYLOTUS_SCRIPTING_BACKEND`. Useful in CI,
+   where committing the value is the wrong place for it.
+2. **`SkylotusProject.json`**, beside `Assets/`. Override its path with
+   `SKYLOTUS_PROJECT_CONFIG`.
+3. **A default.** Blank-but-correct ones (the table above) are applied silently; genuine
+   placeholders are reported as `NEEDS A REAL VALUE`.
+
+The file is committed, so the whole team gets the same identity from a clone. If you would
+rather each developer keep their own, add it to `.gitignore` — but then CI has to supply the
+values through the environment variables instead.
 
 ### 2. Run the configuration command
 
@@ -171,9 +188,9 @@ but still wrong until those two are real.
 Or, from inside the Editor: **Skylotus → Configure New Project**.
 
 It writes bundle identity (Standalone, Android, iOS), the standalone scripting backend,
-managed stripping level `Low`, IL2CPP compiler configuration `Release`, and the 2D sorting
-layer stack — all through `PlayerSettings` and a `SerializedObject` over `TagManager.asset`,
-never by editing YAML. It is idempotent: a second run reports no changes.
+managed stripping level `Low`, IL2CPP compiler configuration `Release`, the application icon,
+and the 2D sorting layer stack — all through `PlayerSettings` and a `SerializedObject` over
+`TagManager.asset`, never by editing YAML. It is idempotent: a second run reports no changes.
 
 ### 3. Understand the licence
 
@@ -211,9 +228,17 @@ licence and needs none of it.
 
 ### 5. Set the application icon
 
-There is none. `ConfigureProject` deliberately does not invent one — a placeholder icon looks
-intentional and survives to release. Add a square texture under `Assets/`, point `iconPath` at
-it, and re-run.
+Put a square PNG at **`Assets/Resources/Icon/icon.png`** and re-run `ConfigureProject`. That is
+the convention slot: no `iconPath` entry is needed, and nothing has to be configured. Set
+`iconPath` only if you want to keep the icon somewhere else.
+
+`ConfigureProject` does not invent a placeholder, and warns when no icon is set — a placeholder
+icon looks intentional and survives to release, whereas Unity's default logo does not.
+
+**It has to be a PNG, not an `.ico`.** Unity's texture importer has no `.ico` reader, so
+`PlayerSettings` cannot take one. Unity builds the Windows executable's `.ico` itself, from this
+texture, at build time. If an `icon.ico` is sitting in that folder, `ConfigureProject` says so
+explicitly rather than appearing to ignore it.
 
 ### 6. Set the save encryption key (optional)
 
