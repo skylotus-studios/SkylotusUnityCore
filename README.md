@@ -88,14 +88,16 @@ licensed per-seat under the Unity Asset Store EULA, which does not permit redist
 fresh clone does not have it, and `MainMenu.unity` references it in five places — four `Image`
 sprites and an `Animation` clip.
 
-```bash
-./Tools/import-local-assets.sh /path/to/your/SkylotusUnityCore
+```powershell
+.\Tools\import-local-assets.ps1
 ```
 
-It copies each excluded pack from a checkout that has it, **`.meta` files included**, so the
-GUIDs match and the existing scene references resolve. Without the `.meta` files Unity would
-mint new GUIDs and the references would break exactly as if the pack were still missing.
-`./Tools/import-local-assets.sh --list` shows what the project expects and what is present.
+It copies each excluded pack from `C:\dev\SkylotusUnityCore` — the original checkout — with the
+**`.meta` files included**, so the GUIDs match and the existing scene references resolve. Without
+the `.meta` files Unity would mint new GUIDs and the references would break exactly as if the pack
+were still missing. `.\Tools\import-local-assets.ps1 -List` shows what the project expects and
+what is present. If your reference checkout lives somewhere other than `C:\dev\SkylotusUnityCore`,
+edit `$Source` at the top of the script.
 
 **Do this before opening the project in Unity.** Unity records missing references on first
 import; supplying the assets afterwards means a reimport to clear them.
@@ -1190,14 +1192,15 @@ per-seat and does not permit redistribution, so it is **gitignored and excluded*
 does not have it, and `MainMenu.unity` will show missing sprites on four `Image` components and a
 null `Animation` clip until you supply it.
 
-If you own the pack, put your copy in a reference checkout and run:
+If you own the pack, make sure your copy is in the reference checkout at
+`C:\dev\SkylotusUnityCore` and run:
 
-```bash
-./Tools/import-local-assets.sh /path/to/reference-checkout
+```powershell
+.\Tools\import-local-assets.ps1
 ```
 
 That copies each excluded pack in, `.meta` files included, so existing GUID references resolve
-rather than breaking. `./Tools/import-local-assets.sh --list` shows what the project expects.
+rather than breaking. `.\Tools\import-local-assets.ps1 -List` shows what the project expects.
 
 If you do not own it, replace those references with your own loading art.
 
