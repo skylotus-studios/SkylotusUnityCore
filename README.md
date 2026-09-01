@@ -74,12 +74,35 @@ Not in that list, because they are not resolved through `ServiceLocator`:
 
 ## Clone and initialize
 
+### 1. Clone
+
 ```bash
 cd PathToFolder
 git clone https://github.com/skylotus-studios/SkylotusUnityCore.git
 ```
 
-Delete the `.git` folder (usually hidden), then start your project's own history:
+### 2. Bring in the excluded assets — before opening Unity
+
+One asset pack is **deliberately not in this repository**: `Assets/Animated Loading Icons/` is
+licensed per-seat under the Unity Asset Store EULA, which does not permit redistribution. A
+fresh clone does not have it, and `MainMenu.unity` references it in five places — four `Image`
+sprites and an `Animation` clip.
+
+```bash
+./Tools/import-local-assets.sh /path/to/your/SkylotusUnityCore
+```
+
+It copies each excluded pack from a checkout that has it, **`.meta` files included**, so the
+GUIDs match and the existing scene references resolve. Without the `.meta` files Unity would
+mint new GUIDs and the references would break exactly as if the pack were still missing.
+`./Tools/import-local-assets.sh --list` shows what the project expects and what is present.
+
+**Do this before opening the project in Unity.** Unity records missing references on first
+import; supplying the assets afterwards means a reimport to clear them.
+
+If you do not own the pack, replace those five references with your own loading art instead.
+
+### 3. Start your own history
 
 ```bash
 git init
@@ -89,6 +112,11 @@ git commit -m "Project Init"
 git remote add origin https://github.com/user/project.git
 git push -u origin master
 ```
+
+`.gitignore` carries the exclusion forward, so the pack stays out of your repository too. That
+rule exists because *this* repository is public. If yours is private and your team is covered by
+the licence, you may prefer to track it — delete the `Animated Loading Icons` lines from
+`.gitignore` before that first commit.
 
 ---
 
@@ -156,8 +184,8 @@ If you are cloning this as your own project's base under the workflow above, you
 with Skylotus Studios' permission as the copyright holder; replace `LICENSE` with whatever
 terms your own project ships under.
 
-Note that `Assets/Animated Loading Icons/` is an Asset Store pack, excluded from this repository
-under its EULA. See [Known open items](#known-open-items) for how to supply your own copy.
+The one vendored pack this does not cover is `Assets/Animated Loading Icons/`, which is excluded
+from the repository entirely — see [step 2 of Clone and initialize](#2-bring-in-the-excluded-assets--before-opening-unity).
 
 ### 4. Add a Unity licence secret, or CI stays red
 
