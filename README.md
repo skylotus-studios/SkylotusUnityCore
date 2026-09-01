@@ -947,7 +947,12 @@ GameLogger.SetCategoryLevel("Combat", LogLevel.Trace);
 configures it first, before any other system, and `_enableFileLogging` (default **off**) writes
 a timestamped file into `Application.persistentDataPath/Logs`. Nothing collects those files.
 
-**`GameLogger` is not thread-safe** — see [Known open items](#known-open-items).
+`GameLogger` is safe to call from any thread. The message buffer is `[ThreadStatic]`, the
+category-level map is a `ConcurrentDictionary`, and file appends are serialized behind a lock.
+It was none of those things once: a single background-thread call could corrupt the category
+map, and because a torn `Dictionary` throws on **every** subsequent read, that permanently broke
+logging for the rest of the session — taking every system that logs down with it.
+`GameLoggerTests` covers this.
 
 ### BrightnessController (`Skylotus.Core.Rendering`)
 
@@ -1150,24 +1155,6 @@ Build Support (IL2CPP)* module has only `*_mono` variations and the build fails.
 via **Unity Hub → Installs → Add Modules**. `ConfigureProject` warns when it detects this.
 Escape hatch: `SKYLOTUS_SCRIPTING_BACKEND=Mono2x`, or `"scriptingBackend": "Mono2x"` in
 `SkylotusProject.json`.
-
-### `CustomCursor` throws on mouseless devices
-
-`CustomCursor.UpdateMouseCursor` falls back to legacy `UnityEngine.Input.mousePosition` when
-`Mouse.current == null`. This project runs `activeInputHandler: 1` — **Input System only** —
-where touching legacy `Input` throws. On any device with no mouse the cursor code therefore
-throws *every frame*. It surfaced by breaking 19 of 45 PlayMode tests the moment one loaded
-`Gameplay.unity` (which carries `CursorCanvas`); the tests route around it by loading
-`BootScene` instead. **This is not a test-only problem and it is not fixed.**
-
-### `GameLogger` is not thread-safe
-
-`GameLogger` holds a single `private static readonly StringBuilder _buffer`, and `WriteLog`
-does `Clear()` → `Append()` → `ToString()` on it with no lock. Two threads logging concurrently
-interleave into one buffer and produce corrupted lines or a torn read. Nothing calls it off the
-main thread **today** — `SaveSystem`'s worker-thread helpers are deliberately Unity-API-free and
-log-free — but that is a constraint every future async system inherits. The fix is a
-`[ThreadStatic]` buffer, a lock, or a plain local `StringBuilder`.
 
 ### Smaller items
 

@@ -137,13 +137,15 @@ namespace Skylotus
 
         private void UpdateMouseCursor()
         {
-            SetCursorVisible(true);
+            if (!TryReadPointerPosition(out var screenPos))
+            {
+                // No pointing device is present. Leaving the cursor visible would strand it
+                // wherever it happened to be last frame, so hide it until a mouse appears.
+                SetCursorVisible(false);
+                return;
+            }
 
-            Vector2 screenPos;
-            if (Mouse.current != null)
-                screenPos = Mouse.current.position.ReadValue();
-            else
-                screenPos = Input.mousePosition;
+            SetCursorVisible(true);
 
             // Convert the raw screen-pixel position into the canvas's local coordinate
             // space. ScreenPointToLocalPointInRectangle handles the Canvas Scaler math
@@ -153,6 +155,43 @@ namespace Skylotus
             {
                 _cursorRect.localPosition = localPoint;
             }
+        }
+
+        /// <summary>
+        /// Read the pointer position from whichever input backend is actually compiled in.
+        /// </summary>
+        /// <param name="position">The pointer position in screen pixels, or default when none exists.</param>
+        /// <returns>False when no pointing device is available, so the caller can hide the cursor.</returns>
+        /// <remarks>
+        /// The legacy branch is behind <c>ENABLE_LEGACY_INPUT_MANAGER</c> deliberately. This project
+        /// ships <c>activeInputHandler: 1</c> (Input System only), and under that setting **every**
+        /// access to <c>UnityEngine.Input</c> throws <see cref="System.InvalidOperationException"/>.
+        /// An unguarded <c>Input.mousePosition</c> fallback therefore threw once per frame on any
+        /// device without a mouse — headless CI, a gamepad-only console, a touch device — turning a
+        /// missing cursor into an exception storm.
+        /// </remarks>
+        private static bool TryReadPointerPosition(out Vector2 position)
+        {
+            if (Mouse.current != null)
+            {
+                position = Mouse.current.position.ReadValue();
+                return true;
+            }
+
+            if (Pointer.current != null)
+            {
+                // Covers pens and touchscreens, which report through Pointer but not Mouse.
+                position = Pointer.current.position.ReadValue();
+                return true;
+            }
+
+#if ENABLE_LEGACY_INPUT_MANAGER
+            position = Input.mousePosition;
+            return true;
+#else
+            position = default;
+            return false;
+#endif
         }
 
         // ─── Gamepad Mode ───────────────────────────────────────────

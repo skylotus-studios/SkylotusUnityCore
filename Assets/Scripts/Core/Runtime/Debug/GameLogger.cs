@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using UnityEngine;
@@ -21,11 +21,27 @@ namespace Skylotus
         /// <summary>Global minimum log level. Messages below this level are discarded.</summary>
         private static LogLevel _globalLevel = LogLevel.Debug;
 
-        /// <summary>Per-category overrides. If a category is present here, it uses its own level.</summary>
-        private static readonly Dictionary<string, LogLevel> _categoryLevels = new();
+        /// <summary>
+        /// Per-category overrides. If a category is present here, it uses its own level.
+        /// Concurrent, because reads happen on every log call while
+        /// <see cref="SetCategoryLevel"/> can write from anywhere — a plain
+        /// <see cref="Dictionary{TKey,TValue}"/> can corrupt or throw if the two overlap.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, LogLevel> _categoryLevels = new();
 
-        /// <summary>Reusable string builder to avoid allocation in hot paths.</summary>
-        private static readonly StringBuilder _buffer = new();
+        /// <summary>
+        /// Reusable string builder, one per thread, to avoid allocating on every log call.
+        /// </summary>
+        /// <remarks>
+        /// This was a single shared instance. <see cref="WriteLog"/> does
+        /// <c>Clear()</c> → <c>Append()</c> → <c>ToString()</c> on it, so two threads logging at
+        /// once interleaved into one buffer and produced torn or corrupted lines. Per-thread
+        /// storage keeps the allocation saving without the sharing.
+        /// </remarks>
+        [ThreadStatic] private static StringBuilder _buffer;
+
+        /// <summary>Serializes appends to the log file — concurrent writers would throw on the open handle.</summary>
+        private static readonly object _fileLock = new();
 
         /// <summary>Full path to the current session's log file (null if file logging is off).</summary>
         private static string _logFilePath;
@@ -47,7 +63,7 @@ namespace Skylotus
         {
             _globalLevel = LogLevel.Debug;
             _categoryLevels.Clear();
-            _buffer.Clear();
+            _buffer = null;
             _logFilePath = null;
             _writeToFile = false;
             _includeTimestamp = true;
@@ -136,14 +152,18 @@ namespace Skylotus
                 return;
             }
 
-            _buffer.Clear();
+            // Per-thread buffer, created on first use by this thread. A [ThreadStatic] field
+            // cannot carry an initializer — only the declaring thread would ever run it.
+            var buffer = _buffer ??= new StringBuilder(256);
+
+            buffer.Clear();
 
             if (_includeTimestamp)
-                _buffer.Append($"[{DateTime.Now:HH:mm:ss.fff}] ");
+                buffer.Append($"[{DateTime.Now:HH:mm:ss.fff}] ");
 
-            _buffer.Append($"[{level}] [{category}] {message}");
+            buffer.Append($"[{level}] [{category}] {message}");
 
-            var formatted = _buffer.ToString();
+            var formatted = buffer.ToString();
 
             // Route to the appropriate Unity log channel
             switch (level)
@@ -170,7 +190,13 @@ namespace Skylotus
                     if (_includeStackTrace && level >= LogLevel.Error)
                         formatted += $"\n{Environment.StackTrace}";
 
-                    File.AppendAllText(_logFilePath, formatted + "\n");
+                    // Serialized: two threads appending to the same path at once throws
+                    // IOException on the file handle, and the catch below would swallow the
+                    // line entirely — losing exactly the logs a concurrency bug produces.
+                    lock (_fileLock)
+                    {
+                        File.AppendAllText(_logFilePath, formatted + "\n");
+                    }
                 }
                 catch { /* Silently fail file writes to avoid cascading errors */ }
             }
