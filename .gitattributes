@@ -1,3 +1,21 @@
+# Line endings
+#
+# Every text file is stored LF in the repository and checked out LF on every platform.
+#
+# This lives here, not in each developer's core.autocrlf, because core.autocrlf is a
+# per-machine global setting that is not shared by a clone. Somebody cloning with it unset
+# would otherwise start committing CRLF and produce whole-file diffs on files nobody edited.
+# .gitattributes travels with the repository and overrides core.autocrlf, so the result is
+# the same for everyone.
+#
+# eol=lf rather than plain text=auto so the working tree matches .editorconfig's
+# end_of_line = lf, and matches what Unity itself writes into scenes, prefabs and .meta
+# files on every platform.
+#
+# The LFS rules below carry -text, which marks those types binary and correctly exempts
+# them from all of this. Keep this block first: in .gitattributes, later rules win.
+* text=auto eol=lf
+
 # 3D models
 *.3dm filter=lfs diff=lfs merge=lfs -text
 *.3ds filter=lfs diff=lfs merge=lfs -text
