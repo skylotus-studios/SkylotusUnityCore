@@ -31,15 +31,17 @@ namespace Skylotus.Tests.PlayMode
         /// <summary>
         /// Scene the loading screen is exercised against. Must be in Build Settings.
         ///
-        /// <c>BootScene</c> rather than <c>Gameplay</c> deliberately: <c>Gameplay</c> carries a
-        /// <c>CursorCanvas</c> whose <c>CustomCursor.UpdateMouseCursor</c> falls back to the legacy
-        /// <c>UnityEngine.Input.mousePosition</c> when no mouse device is present, which throws
-        /// every frame under this project's Input-System-only handling — a real defect, but one
-        /// that lives outside this package's files and would otherwise mask every assertion here.
-        /// <c>BootScene</c> holds only a camera and a <c>Bootstrapper</c>, and that bootstrapper
-        /// destroys itself on sight because the core systems are already up.
+        /// <c>Gameplay</c> is used because it is the closest thing the project has to a real
+        /// destination scene — a camera, an <c>EventSystem</c> and a <c>CursorCanvas</c> — so the
+        /// load being measured is a load of actual content rather than of an empty room.
+        ///
+        /// This originally had to be <c>BootScene</c>: <c>CustomCursor</c> fell back to legacy
+        /// <c>UnityEngine.Input.mousePosition</c> when no mouse was present, which throws on every
+        /// frame under this project's Input-System-only handling, and headless test runs have no
+        /// mouse. That is fixed — the legacy path is compiled out and the cursor stands down when
+        /// there is no pointing device — so this fixture exercises the real scene again.
         /// </summary>
-        private const string TargetScene = "BootScene";
+        private const string TargetScene = "Gameplay";
 
         /// <summary>Fade duration used during the test, long enough to sample across frames.</summary>
         private const float TestFadeDuration = 0.6f;

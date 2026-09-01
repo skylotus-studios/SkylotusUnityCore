@@ -26,15 +26,17 @@ namespace Skylotus.Tests.PlayMode
         /// <summary>
         /// Scene loaded by the scene-survival case. Must be in Build Settings.
         ///
-        /// <c>BootScene</c> rather than <c>Gameplay</c> deliberately: <c>Gameplay</c> carries a
-        /// <c>CursorCanvas</c> whose <c>CustomCursor.UpdateMouseCursor</c> falls back to the legacy
-        /// <c>UnityEngine.Input.mousePosition</c> when no mouse device is present, which throws
-        /// every frame under this project's Input-System-only handling — a real defect, but one
-        /// that lives outside this package's files and would otherwise mask every assertion here.
-        /// <c>BootScene</c> holds only a camera and a <c>Bootstrapper</c>, and that bootstrapper
-        /// destroys itself on sight because the core systems are already up.
+        /// <c>Gameplay</c> is used because the behaviour under test is what a single-mode load
+        /// does to pooled instances, and a scene carrying real objects is a more honest stand-in
+        /// for a level transition than an almost-empty one.
+        ///
+        /// This originally had to be <c>BootScene</c>: <c>CustomCursor</c> fell back to legacy
+        /// <c>UnityEngine.Input.mousePosition</c> when no mouse was present, which throws on every
+        /// frame under this project's Input-System-only handling, and headless test runs have no
+        /// mouse. That is fixed — the legacy path is compiled out and the cursor stands down when
+        /// there is no pointing device — so this fixture exercises the real scene again.
         /// </summary>
-        private const string SurvivalScene = "BootScene";
+        private const string SurvivalScene = "Gameplay";
 
         /// <summary>Records pool lifecycle callbacks so they can be asserted on.</summary>
         private class PoolProbe : MonoBehaviour, IPoolable
