@@ -159,20 +159,40 @@ terms your own project ships under.
 Note that `Assets/Animated Loading Icons/` is an Asset Store pack, excluded from this repository
 under its EULA. See [Known open items](#known-open-items) for how to supply your own copy.
 
-### 4. Set the application icon
+### 4. Add a Unity licence secret, or CI stays red
+
+`.github/workflows/unity-tests.yml` runs the suite on every push and PR through GameCI, which
+has to activate a Unity licence inside the runner. With no secret configured **every run fails
+at activation before a single test executes**:
+
+```
+Missing Unity License File and no Serial was found.
+```
+
+Under *Settings → Secrets and variables → Actions*, add whichever pair applies:
+
+| Licence | Secrets |
+|---------|---------|
+| Personal | `UNITY_LICENSE` — the full contents of your `.ulf` file ([activation steps](https://game.ci/docs/github/activation)) |
+| Pro / Plus | `UNITY_SERIAL`, `UNITY_EMAIL`, `UNITY_PASSWORD` |
+
+This is CI-only. Local verification through `Tools/unity-verify.ps1` uses the Editor's own
+licence and needs none of it.
+
+### 5. Set the application icon
 
 There is none. `ConfigureProject` deliberately does not invent one — a placeholder icon looks
 intentional and survives to release. Add a square texture under `Assets/`, point `iconPath` at
 it, and re-run.
 
-### 5. Set the save encryption key (optional)
+### 6. Set the save encryption key (optional)
 
 `Bootstrapper._saveEncryptionKey` is empty, so saves are plaintext JSON. Setting it turns on
 AES-256-CBC obfuscation. **Read `SaveSystem`'s class summary before you rely on it** — the key
 is a `[SerializeField]` on a scene object, so it ships inside the build and is recoverable in
 minutes. It is anti-tamper friction, not security.
 
-### 6. Decide what the template leaves open
+### 7. Decide what the template leaves open
 
 - IL2CPP is configured but may not be buildable on your machine — see
   [Known open items](#known-open-items).

@@ -1,14 +1,20 @@
 name: Unity Tests
 
-# WP-13 (see CORE_FIXES.md). Mirrors Tools/unity-verify.ps1's intent so local and CI
-# verification cannot drift: compile first, then EditMode + PlayMode tests via the Unity
-# test framework. GameCI's actions wrap the equivalent Unity CLI invocation (batchmode,
-# nographics, -runTests/-testPlatform/-testResults) plus license activation, which the
-# local script does not need to handle itself.
+# Mirrors Tools/unity-verify.ps1's intent so local and CI verification cannot drift:
+# EditMode + PlayMode tests through the Unity test framework. GameCI's actions wrap the
+# equivalent CLI invocation (batchmode, nographics, -runTests/-testPlatform/-testResults)
+# plus licence activation, which the local script does not have to handle.
 #
-# Assets/Tests/** does not exist yet -- WP-12 (a later wave) creates it. Until then the
-# "detect-tests" job below routes every run to a compile-only check instead of failing on
-# a test suite that has not been written.
+# REQUIRES A UNITY LICENCE SECRET. Without one every run fails at activation with
+# "Missing Unity License File and no Serial was found", before a single test executes.
+#   Personal: set UNITY_LICENSE to the contents of your .ulf file.
+#             Activation steps: https://game.ci/docs/github/activation
+#   Pro/Plus: set UNITY_SERIAL, UNITY_EMAIL and UNITY_PASSWORD instead.
+# Add them under Settings -> Secrets and variables -> Actions.
+#
+# The detect-tests gate below exists so this workflow does not fail on a project that has
+# no test suite; it routes those to a compile-only check. Assets/Tests now exists, so the
+# real matrix is what runs.
 
 on:
   pull_request:
@@ -43,17 +49,16 @@ jobs:
         name: Check whether Assets/Tests exists yet
         shell: bash
         run: |
-          # WP-12 adds Assets/Tests (with EditMode/PlayMode asmdefs) in a later wave. Failing
-          # this workflow for a suite that has not been written yet would be a false positive
-          # on every PR in the meantime, so route to a compile-only job instead.
+          # A project with no test suite should still get a compile signal rather than a red
+          # tick for tests that do not exist, so route those runs to the compile-only job.
           if [ -d "Assets/Tests" ] && find Assets/Tests -name '*.asmdef' -print -quit | grep -q .; then
             echo "hasTests=true" >> "$GITHUB_OUTPUT"
           else
             echo "hasTests=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Assets/Tests not found yet (added by WP-12). Running a compile-only check instead of EditMode/PlayMode tests."
+            echo "::notice::No test assemblies under Assets/Tests. Running a compile-only check instead of EditMode/PlayMode tests."
           fi
 
-  # --- Real path, once WP-12 lands -------------------------------------------
+  # --- Test suite present: run it --------------------------------------------
   test:
     name: ${{ matrix.testMode }} tests
     needs: detect-tests
@@ -82,7 +87,10 @@ jobs:
         uses: game-ci/unity-test-runner@v4
         id: tests
         env:
+          # Personal licences use UNITY_LICENSE (.ulf contents); Pro/Plus use UNITY_SERIAL
+          # with the account email and password. Set whichever pair applies.
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
@@ -91,15 +99,19 @@ jobs:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           checkName: ${{ matrix.testMode }} test results
 
+      # Guarded on the path being non-empty, not just on always(). When the test step fails
+      # before producing results -- a missing licence is the usual cause -- artifactsPath is
+      # empty and upload-artifact fails with "Input required and not supplied: path",
+      # reporting a second, misleading error on top of the real one.
       - name: Upload test results
-        if: always()
+        if: always() && steps.tests.outputs.artifactsPath != ''
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.testMode }}
           path: ${{ steps.tests.outputs.artifactsPath }}
           retention-days: 14
 
-  # --- Interim path, until WP-12 lands ----------------------------------------
+  # --- No test suite: compile only --------------------------------------------
   compile-only:
     name: Compile check (no test suite yet)
     needs: detect-tests
@@ -123,13 +135,16 @@ jobs:
       # Runs an EditMode pass with zero test assemblies present. Unity's test runner does
       # not fail on an empty suite -- it still forces a full script compile, which is the
       # same signal `Tools\unity-verify.ps1 -Mode compile` gives locally (non-zero exit ==
-      # scripts failed to compile). This job stops being selected automatically the moment
-      # WP-12 adds Assets/Tests; the "test" job above takes over via the gate above.
+      # scripts failed to compile). This job stops being selected the moment a test
+      # assembly appears; the "test" job above takes over through the gate.
       - name: Compile check
         uses: game-ci/unity-test-runner@v4
         id: compile
         env:
+          # Personal licences use UNITY_LICENSE (.ulf contents); Pro/Plus use UNITY_SERIAL
+          # with the account email and password. Set whichever pair applies.
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
