@@ -156,8 +156,8 @@ If you are cloning this as your own project's base under the workflow above, you
 with Skylotus Studios' permission as the copyright holder; replace `LICENSE` with whatever
 terms your own project ships under.
 
-One item is still unresolved: `Assets/Animated Loading Icons/` is a third-party pack with no
-licence file and unconfirmed provenance. See [Known open items](#known-open-items).
+Note that `Assets/Animated Loading Icons/` is an Asset Store pack, excluded from this repository
+under its EULA. See [Known open items](#known-open-items) for how to supply your own copy.
 
 ### 4. Set the application icon
 
@@ -987,8 +987,9 @@ the box in the three scenes is the cleaner fix and would let that workaround be 
 `Vector3.Flat/WithX/WithY/WithZ/FlatDistance/RandomPointXZ`, `Color.WithAlpha`,
 `IList<T>.RandomElement/Shuffle`, and `MonoBehaviour.Delay(seconds, action)/NextFrame(action)`.
 
-`SingletonBehaviour<T>` also exists and is **used by no core system** — they all use
-`ServiceLocator`. Two competing patterns; pick one for your project rather than mixing them.
+There is deliberately no `SingletonBehaviour<T>` base class. One existed and was used by nothing —
+every system resolves through `ServiceLocator` — so it was removed rather than left as a second,
+competing pattern for someone to pick up by accident.
 
 ---
 
@@ -1124,15 +1125,23 @@ debugging time:
 
 Things a fresh clone will actually hit. None of these is hidden anywhere else.
 
-### A vendored asset pack has unconfirmed licensing
+### A license-restricted asset pack is not in this repository
 
-`Assets/Animated Loading Icons/` ships with vendor documentation but **no licence file**, and its
-origin has not been confirmed. If it came from the Unity Asset Store, keeping it in a public
-repository is likely to breach the Asset Store EULA, which generally prohibits distributing pack
-contents in a form third parties can extract.
+`Assets/Animated Loading Icons/` is a Unity Asset Store pack. The Asset Store EULA licenses it
+per-seat and does not permit redistribution, so it is **gitignored and excluded** — a fresh clone
+does not have it, and `MainMenu.unity` will show missing sprites on four `Image` components and a
+null `Animation` clip until you supply it.
 
-This is independent of `LICENSE`, which covers Skylotus Studios' own code only. Until the pack's
-provenance is confirmed, either remove it from the repository or make the repository private.
+If you own the pack, put your copy in a reference checkout and run:
+
+```bash
+./Tools/import-local-assets.sh /path/to/reference-checkout
+```
+
+That copies each excluded pack in, `.meta` files included, so existing GUID references resolve
+rather than breaking. `./Tools/import-local-assets.sh --list` shows what the project expects.
+
+If you do not own it, replace those references with your own loading art.
 
 ### IL2CPP is configured but may not be buildable
 
@@ -1201,7 +1210,7 @@ Enforced by `.editorconfig` and described in `CLAUDE.md`:
 - No new `Resources.Load` calls.
 - Systems never hold direct references to one another.
 
-`CORE_FIXES.md` is the historical record: the defect list this template was built from, the
-work packages that fixed each one, and the wave-by-wave outcomes — including three premises in
-the original plan that turned out to be wrong. Read it before changing anything under
-`Assets/Scripts/Core/Runtime/` or `Assets/Scripts/Editor/`.
+The defect list this template was built from, and the wave-by-wave record of fixing it, lived in
+`CORE_FIXES.md`. It has been removed now that the work is finished — it documented this
+repository's own history rather than anything a project cloned from it needs. It remains in the
+git history if you ever want it.

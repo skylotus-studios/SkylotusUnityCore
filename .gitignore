@@ -88,3 +88,7 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+# Third-party Asset Store content. Licensed per-seat under the Unity Asset Store EULA,
+# which does not permit redistribution. Purchased packs must not live in this repository.
+/[Aa]ssets/Animated Loading Icons/
+/[Aa]ssets/Animated Loading Icons.meta

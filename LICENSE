@@ -5,7 +5,7 @@ SOURCE-AVAILABLE — NOT OPEN SOURCE
 ===================================
 
 This repository is public so that the code can be read, studied and discussed. It is
-not open source, and no licence to use it is granted.
+not open source, and no license to use it is granted.
 
 You MAY:
 
@@ -43,30 +43,25 @@ This repository vendors third-party material that this notice does NOT cover. Ea
 remains under its own terms, which take precedence over everything above:
 
   - Assets/Plugins/UnityEditorDarkMode/ — MIT, Copyright (c) 2024 Jiaqi (0x7c13) Liu.
-    Full licence text in that folder's README.txt.
+    Full license text in that folder's README.txt.
 
   - Assets/TextMesh Pro/ — Unity Technologies, distributed with the Unity Editor and
-    governed by the Unity Companion Licence / Unity Terms of Service.
-
-  - Assets/Animated Loading Icons/ — third-party asset pack. LICENCE STATUS UNRESOLVED.
-    See the warning below.
+    governed by the Unity Companion License / Unity Terms of Service.
 
   - Packages/ — resolved by the Unity Package Manager, not vendored here. LitMotion,
     Universal RP, Input System, Test Framework and the rest each carry their own terms.
 
 
-UNRESOLVED — Assets/Animated Loading Icons/
---------------------------------------------
+DELIBERATELY EXCLUDED
+---------------------
 
-This pack ships with vendor documentation but no licence file, and its origin has not
-been confirmed. If it came from the Unity Asset Store, redistributing it in a public
-repository is likely to breach the Asset Store EULA, which generally prohibits
-distributing pack contents in a form third parties can extract — which is precisely what
-a public repository does.
+Assets/Animated Loading Icons/ is a Unity Asset Store pack. The Asset Store EULA licenses
+it per-seat and does not permit redistribution, so it is gitignored and is not part of
+this repository. A clone will not have it, and MainMenu.unity will show missing sprite
+and animation references until it is supplied.
 
-This is a separate problem from the licensing of Skylotus Studios' own code, and choosing
-this notice does not resolve it. Until its provenance is confirmed, either remove the pack
-from the repository or make the repository private. See CORE_FIXES.md.
+If you own the pack, Tools/import-local-assets.sh copies it in from a local reference
+checkout. If you do not, substitute your own loading art.
 
 
 PERMISSIONS
