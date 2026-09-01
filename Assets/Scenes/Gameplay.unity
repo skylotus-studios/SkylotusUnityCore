@@ -297,6 +297,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Skylotus.Core.Runtime::Skylotus.CustomCursor
   _cursorImage: {fileID: 1828762553}
   _canvas: {fileID: 1213959076}
+  _defaultSelection: {fileID: 0}
   _snapDuration: 0.12
   _selectionOffset: {x: 0, y: 0}
   _hideWhenNoSelection: 0
@@ -416,7 +417,7 @@ MonoBehaviour:
     m_Bits: 1
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
-  m_RenderPostProcessing: 0
+  m_RenderPostProcessing: 1
   m_Antialiasing: 0
   m_AntialiasingQuality: 2
   m_StopNaN: 0

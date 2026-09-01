@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -30,13 +29,13 @@ namespace Skylotus.Core.Rendering
     /// the main menu's first frame already renders at the player's chosen brightness. Nothing
     /// needs to place this on a prefab or in a scene.
     ///
-    /// <b>It turns post-processing on.</b> A color-grading brightness only exists if the URP
-    /// post-processing pass runs, and every camera in this project ships with
-    /// <c>Render Post Processing</c> unticked. While a non-default brightness is in effect this
-    /// component sets <see cref="UniversalAdditionalCameraData.renderPostProcessing"/> on every
-    /// base camera that has it off, and restores those cameras when brightness returns to the
-    /// default — so a project nobody has dimmed pays nothing for the feature. Cameras that
-    /// already had post-processing enabled are left alone.
+    /// <b>Requires camera post-processing.</b> A color-grading brightness only exists if the URP
+    /// post-processing pass runs, which means every base camera needs
+    /// <c>Render Post Processing</c> ticked. The scenes are authored that way — see
+    /// <c>SkylotusCI.EnableCameraPostProcessing</c>, and
+    /// <c>SkylotusCI.ValidateCameraPostProcessing</c> guards it — so this component never touches
+    /// camera state. Add a camera with the flag off and brightness silently stops affecting it;
+    /// the validator is what catches that.
     ///
     /// <b>Not a <c>SingletonBehaviour</c>.</b> That base class auto-creates on first
     /// <c>Instance</c> access, which would spawn a controller from any thread that merely asked
@@ -107,13 +106,6 @@ namespace Skylotus.Core.Rendering
         /// <summary>The single override this component writes to.</summary>
         private ColorAdjustments _colorAdjustments;
 
-        /// <summary>Cameras whose post-processing this component switched on, for restoring later.</summary>
-        private readonly List<UniversalAdditionalCameraData> _forcedCameras =
-            new List<UniversalAdditionalCameraData>();
-
-        /// <summary>Reusable buffer for <c>Camera.GetAllCameras</c> so the per-frame scan allocates nothing.</summary>
-        private Camera[] _cameraBuffer = new Camera[4];
-
         /// <summary>Last brightness handed to <see cref="SetBrightness"/>.</summary>
         private float _brightness = SettingsService.DefaultBrightness;
 
@@ -176,13 +168,7 @@ namespace Skylotus.Core.Rendering
             {
                 _adjusting = adjusting;
                 _volume.enabled = adjusting;
-
-                if (!adjusting)
-                    RestoreCameras();
             }
-
-            if (_adjusting)
-                ApplyToCameras();
         }
 
         /// <summary>
@@ -269,9 +255,6 @@ namespace Skylotus.Core.Rendering
         {
             if (!_registered)
                 TryRegister();
-
-            if (_adjusting)
-                ApplyToCameras();
         }
 
         /// <summary>Unity OnApplicationQuit — stop <see cref="Ensure"/> resurrecting the host during teardown.</summary>
@@ -289,8 +272,6 @@ namespace Skylotus.Core.Rendering
         {
             if (_instance != this)
                 return;
-
-            RestoreCameras();
 
             if (_registered && ServiceLocator.TryGet<SettingsService>(out var settings) && settings != null)
             {
@@ -381,74 +362,6 @@ namespace Skylotus.Core.Rendering
 
             return Mathf.Lerp(DarkestExposure, 0f, t);
         }
-
-        // ─── Cameras ────────────────────────────────────────────────
-
-        /// <summary>
-        /// Switch URP post-processing on for every base camera that has it off, remembering which
-        /// ones were changed. Runs every frame while an adjustment is live rather than off a
-        /// scene-load event, because cameras are created by scene loads, additive loads, pooling
-        /// and gameplay code alike, and a brightness that silently stops working after one of
-        /// those is worse than a per-frame <c>GetComponent</c> on one or two objects.
-        /// </summary>
-        private void ApplyToCameras()
-        {
-            for (int i = _forcedCameras.Count - 1; i >= 0; i--)
-            {
-                if (_forcedCameras[i] == null)
-                    _forcedCameras.RemoveAt(i);
-            }
-
-            int count = Camera.allCamerasCount;
-            if (count == 0)
-                return;
-
-            if (_cameraBuffer.Length < count)
-                _cameraBuffer = new Camera[Mathf.NextPowerOfTwo(count)];
-
-            Camera.GetAllCameras(_cameraBuffer);
-
-            for (int i = 0; i < count; i++)
-            {
-                var cam = _cameraBuffer[i];
-                if (cam == null)
-                    continue;
-
-                var data = cam.GetUniversalAdditionalCameraData();
-                if (data == null)
-                    continue;
-
-                // Overlay cameras in a stack are composited by their base camera, which is where
-                // the post-processing pass belongs. Forcing it on an overlay adds a second pass
-                // for nothing.
-                if (data.renderType != CameraRenderType.Base)
-                    continue;
-
-                if (data.renderPostProcessing)
-                    continue;
-
-                data.renderPostProcessing = true;
-                _forcedCameras.Add(data);
-            }
-        }
-
-        /// <summary>
-        /// Put back the post-processing flag on every camera this component switched on. Cameras
-        /// that already had it enabled were never recorded and are never touched.
-        /// </summary>
-        private void RestoreCameras()
-        {
-            for (int i = 0; i < _forcedCameras.Count; i++)
-            {
-                var data = _forcedCameras[i];
-                if (data != null)
-                    data.renderPostProcessing = false;
-            }
-
-            _forcedCameras.Clear();
-        }
-
-        // ─── Registration ───────────────────────────────────────────
 
         /// <summary>
         /// Hand this component to <see cref="SettingsService"/>, which immediately pushes the

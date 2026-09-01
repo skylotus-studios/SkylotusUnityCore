@@ -999,11 +999,15 @@ built at runtime (nothing on disk is mutated by a slider drag) and overrides exa
 `ColorAdjustments.postExposure`. Brightness maps linearly onto exposure stops, from −2 EV at 0
 to 0 EV at default — so the slider darkens but never brightens past what the artist authored.
 
-**It turns post-processing on.** All three scenes ship with `Render Post Processing` unticked on
-every camera, and a colour-grading brightness does not exist without that pass. While a
-non-default brightness is in effect the controller enables `renderPostProcessing` on every base
-camera that has it off, and restores those cameras when brightness returns to default. Ticking
-the box in the three scenes is the cleaner fix and would let that workaround be deleted.
+**It requires camera post-processing.** A colour-grading brightness does not exist unless URP runs
+the post-processing pass, so every base camera needs `Render Post Processing` ticked. The scenes
+are authored that way; the controller never touches camera state.
+
+Every camera originally shipped with the flag **off**, which meant brightness had no visible
+effect whatsoever. `SkylotusCI.EnableCameraPostProcessing` sets it across every scene in Build
+Settings, and `SkylotusCI.ValidateCameraPostProcessing` fails if one is ever unticked — worth
+keeping in CI, because a camera without it makes brightness silently stop working with no error
+anywhere. That silence is exactly how the original defect survived unnoticed.
 
 ### Extensions
 
@@ -1032,7 +1036,8 @@ through `unity-verify.ps1 -Mode method`. `SkylotusCI` is split across
 | `GenerateCoreSystemsPrefab` | Rebuilds the core systems prefab and re-points `BootScene`. Needs `-Graphics`. |
 | `ValidateCoreSystemsPrefab` | Checks the prefab's components and wiring without rebuilding. |
 | `GenerateAudioMixer` / `ValidateAudioMixer` | The `AudioMixer` asset and its groups/exposed parameters. |
-| `GenerateBrightnessProfile` / `ValidateBrightness` | The URP volume profile side of WP-3. |
+| `GenerateBrightnessProfile` / `ValidateBrightness` | The URP volume profile and the saved value reaching it. |
+| `EnableCameraPostProcessing` / `ValidateCameraPostProcessing` | Ticks `Render Post Processing` on every base camera in every Build Settings scene, and fails if one is ever unticked. Brightness is invisible without it. Needs `-Graphics`. |
 | `ConfigureProject` | Post-clone project settings. Also **Skylotus → Configure New Project**. |
 | `VerifyReleaseConsoleStripped` | Builds a development and a non-development player and proves the console symbols are absent from the release one. |
 | `BuildWindows64` / `BuildLinux64` | Headless player builds for CI. |
