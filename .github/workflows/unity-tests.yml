@@ -111,6 +111,48 @@ jobs:
           path: ${{ steps.tests.outputs.artifactsPath }}
           retention-days: 14
 
+  # --- Scene authoring checks -------------------------------------------------
+  # Deliberately not gated on detect-tests: this asserts how the scenes are authored, which no
+  # unit test can reach. Runs in parallel with the test matrix.
+  #
+  # ValidateCameraPostProcessing exists because the failure it catches is silent. A base camera
+  # with Render Post Processing off makes BrightnessController's colour grading do nothing at
+  # all -- no exception, no warning, just a brightness slider that moves and changes no pixels.
+  # Every camera in the project shipped that way and nobody noticed.
+  scene-checks:
+    name: Scene checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-scenes-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-${{ runner.os }}-scenes-
+            Library-${{ runner.os }}-
+
+      # unity-builder is GameCI's route to an arbitrary -executeMethod (buildMethod), which
+      # unity-test-runner does not expose. The method needs no graphics device -- it only opens
+      # scenes and reads camera components -- so a plain headless runner is enough.
+      - name: Validate camera post-processing
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneLinux64
+          buildMethod: Skylotus.Editor.SkylotusCI.ValidateCameraPostProcessing
+          allowDirtyBuild: true
+
   # --- No test suite: compile only --------------------------------------------
   compile-only:
     name: Compile check (no test suite yet)

@@ -1037,7 +1037,7 @@ through `unity-verify.ps1 -Mode method`. `SkylotusCI` is split across
 | `ValidateCoreSystemsPrefab` | Checks the prefab's components and wiring without rebuilding. |
 | `GenerateAudioMixer` / `ValidateAudioMixer` | The `AudioMixer` asset and its groups/exposed parameters. |
 | `GenerateBrightnessProfile` / `ValidateBrightness` | The URP volume profile and the saved value reaching it. |
-| `EnableCameraPostProcessing` / `ValidateCameraPostProcessing` | Ticks `Render Post Processing` on every base camera in every Build Settings scene, and fails if one is ever unticked. Brightness is invisible without it. Needs `-Graphics`. |
+| `EnableCameraPostProcessing` / `ValidateCameraPostProcessing` | Ticks `Render Post Processing` on every base camera in every Build Settings scene, and fails if one is ever unticked. Brightness is invisible without it. The validator runs in CI as the `Scene checks` job; neither needs `-Graphics`. |
 | `ConfigureProject` | Post-clone project settings. Also **Skylotus → Configure New Project**. |
 | `VerifyReleaseConsoleStripped` | Builds a development and a non-development player and proves the console symbols are absent from the release one. |
 | `BuildWindows64` / `BuildLinux64` | Headless player builds for CI. |
