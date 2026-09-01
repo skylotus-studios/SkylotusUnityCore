@@ -1,15 +1,10 @@
 {
-  "_comment": "Per-project identity, read by SkylotusCI.ConfigureProject. An empty string means 'fall back', so the blank fields below are the ones a new project has to fill in. Keys this file does not define are ignored, and environment variables (SKYLOTUS_PRODUCT_NAME and friends) still win over everything here.",
-
   "companyName": "Skylotus Studios",
   "productName": "",
   "applicationIdentifier": "",
   "bundleVersion": "0.1.0",
   "scriptingBackend": "IL2CPP",
-
-  "_iconComment": "Blank uses the convention slot Assets/Resources/Icon/icon.png. Set this only to keep the icon somewhere else.",
   "iconPath": "",
-
   "sortingLayers": ["Background", "Ground", "Entities", "Foreground", "UI", "Overlay"],
   "tags": [],
   "layers": []
